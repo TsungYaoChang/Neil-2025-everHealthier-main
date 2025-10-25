@@ -13,7 +13,7 @@ const CONFIG = {
     
     // Production - Render.com backend
     // Replace with your actual Render.com URL after deployment
-    return 'https://YOUR_RENDER_URL.onrender.com';
+    return 'https://everhealthier-backend.onrender.com';
   })(),
   
   // FHIR Servers
