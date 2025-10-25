@@ -173,7 +173,7 @@ class PatientDashboard {
       // Show loading state for Patient Profile
       this.showPatientProfileLoading(true);
       
-      const baseUrl = 'http://localhost:3001/api/patient';
+      const baseUrl = `${this.BACKEND_URL}/api/patient`;
       const patientResId = this.currentUser?.fhir?.patientId;
       
       // Debug: Log current user data
