@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Article Detail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto px-4 py-4">
+            <button onclick="window.history.back()" class="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                <span class="font-medium">Back to Articles</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Article Content -->
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        <article id="articleContent" class="bg-white rounded-lg shadow-sm p-6 md:p-10">
+            <!-- Content will be loaded here -->
+        </article>
+
+        <!-- Related Articles -->
+        <section class="mt-12">
+            <h3 class="text-xl font-bold text-gray-900 mb-6">Related Articles</h3>
+            <div class="grid md:grid-cols-2 gap-6" id="relatedArticles">
+                <!-- Related articles will be loaded here -->
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Article data
+        const articles = {
+            1: {
+                title: "Post-Transplant Daily Care Essentials",
+                category: ["Post-Transplant Care", "Lifestyle"],
+                categoryColors: ["bg-blue-100 text-blue-700", "bg-green-100 text-green-700"],
+                date: "October 10, 2025",
+                readTime: "5 min read",
+                content: `
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">Living Well After Your Kidney Transplant</h2>
+                    
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Congratulations on your kidney transplant! This is the beginning of a new chapter in your life. To ensure the best possible outcomes and maintain your new kidney's health, it's essential to establish good daily care routines.
+                    </p>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Lifestyle Adjustments</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Your daily routine plays a crucial role in transplant success. Here are key areas to focus on:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Maintain consistent sleep schedule (7-8 hours per night)</li>
+                        <li>Avoid smoking and limit alcohol consumption</li>
+                        <li>Stay hydrated throughout the day</li>
+                        <li>Practice good personal hygiene to prevent infections</li>
+                        <li>Minimize exposure to sick individuals</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Exercise Recommendations</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Regular physical activity is important for your overall health and can help prevent complications. Start slowly and gradually increase intensity:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li><strong>Walking:</strong> Begin with 10-15 minutes daily, gradually increasing to 30 minutes</li>
+                        <li><strong>Swimming:</strong> Excellent low-impact option after surgical wounds heal</li>
+                        <li><strong>Cycling:</strong> Light to moderate intensity, avoid strenuous terrain</li>
+                        <li><strong>Yoga:</strong> Improves flexibility and reduces stress</li>
+                    </ul>
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                        <p class="text-sm text-blue-900"><strong>Important:</strong> Always consult your healthcare team before starting any new exercise program.</p>
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Self-Monitoring Practices</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Regular self-monitoring helps you and your healthcare team catch potential issues early:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Track daily weight (same time each day)</li>
+                        <li>Monitor blood pressure regularly</li>
+                        <li>Check temperature if feeling unwell</li>
+                        <li>Record medication adherence</li>
+                        <li>Note any unusual symptoms or side effects</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Sleep Hygiene</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Quality sleep supports immune function and overall recovery:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Establish a consistent bedtime routine</li>
+                        <li>Create a comfortable sleep environment (cool, dark, quiet)</li>
+                        <li>Avoid screens 1 hour before bedtime</li>
+                        <li>Limit caffeine after 2 PM</li>
+                        <li>Practice relaxation techniques if needed</li>
+                    </ul>
+
+                    <div class="bg-green-50 border-l-4 border-green-500 p-4 mt-8">
+                        <p class="text-sm text-green-900"><strong>Remember:</strong> These guidelines are general recommendations. Your healthcare team may provide specific instructions tailored to your individual needs.</p>
+                    </div>
+                `
+            },
+            2: {
+                title: "Diet Principles & FAQs for Kidney Transplant Recipients",
+                category: ["Diet & Nutrition"],
+                categoryColors: ["bg-orange-100 text-orange-700"],
+                date: "October 8, 2025",
+                readTime: "7 min read",
+                content: `
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">Nutrition After Kidney Transplant</h2>
+                    
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Proper nutrition is a cornerstone of successful recovery after kidney transplant. While your dietary restrictions may be less strict than before transplant, maintaining a healthy diet is crucial for protecting your new kidney and overall health.
+                    </p>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Protein Intake</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Adequate protein is essential for healing and maintaining muscle mass, but the amount needs to be balanced:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Aim for 1.0-1.2 grams of protein per kilogram of body weight daily</li>
+                        <li>Choose lean protein sources: chicken, fish, eggs, legumes</li>
+                        <li>Distribute protein intake throughout the day</li>
+                        <li>Avoid excessive protein from red meat</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Sodium Management</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Controlling sodium helps manage blood pressure and reduce fluid retention:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Limit sodium to 2,000-3,000 mg per day</li>
+                        <li>Avoid processed and packaged foods</li>
+                        <li>Use herbs and spices instead of salt</li>
+                        <li>Read nutrition labels carefully</li>
+                        <li>Choose fresh foods over canned when possible</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Hydration Tips</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Proper hydration supports kidney function and medication effectiveness:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Drink 8-10 glasses of water daily (unless otherwise directed)</li>
+                        <li>Monitor urine color (pale yellow is ideal)</li>
+                        <li>Increase fluid intake in hot weather or during exercise</li>
+                        <li>Limit sugary drinks and excessive caffeine</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Frequently Asked Questions</h3>
+                    
+                    <div class="space-y-4 mb-6">
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">Can I eat grapefruit?</h4>
+                            <p class="text-gray-700 text-sm">No, grapefruit and grapefruit juice can interfere with immunosuppressive medications. Avoid all grapefruit products.</p>
+                        </div>
+                        
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">Are there any foods I should completely avoid?</h4>
+                            <p class="text-gray-700 text-sm">Avoid raw or undercooked meats, unpasteurized dairy products, and raw eggs. Also avoid grapefruit and pomegranate.</p>
+                        </div>
+                        
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">Can I take vitamin supplements?</h4>
+                            <p class="text-gray-700 text-sm">Only take supplements approved by your transplant team. Some supplements can interact with medications.</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mt-8">
+                        <p class="text-sm text-blue-900"><strong>Tip:</strong> Consider working with a registered dietitian who specializes in kidney transplant nutrition for personalized guidance.</p>
+                    </div>
+                `
+            },
+            3: {
+                title: "Common Side Effects & When to Seek Medical Care",
+                category: ["Health Alert", "Medication"],
+                categoryColors: ["bg-red-100 text-red-700", "bg-purple-100 text-purple-700"],
+                date: "October 5, 2025",
+                readTime: "6 min read",
+                content: `
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">Understanding Side Effects</h2>
+                    
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Immunosuppressive medications are essential for protecting your transplanted kidney, but they can cause side effects. Knowing what to expect and when to seek help is crucial for your safety and peace of mind.
+                    </p>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Common Side Effects</h3>
+                    
+                    <div class="space-y-4 mb-6">
+                        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">Mild Side Effects (Watch and Monitor)</h4>
+                            <ul class="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                                <li>Mild nausea or upset stomach</li>
+                                <li>Headaches</li>
+                                <li>Tremors in hands</li>
+                                <li>Acne or skin changes</li>
+                                <li>Mild swelling in legs or feet</li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-orange-50 border-l-4 border-orange-400 p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">Moderate Side Effects (Contact Care Team)</h4>
+                            <ul class="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                                <li>Persistent nausea or vomiting</li>
+                                <li>Diarrhea lasting more than 24 hours</li>
+                                <li>Temperature above 100.4°F (38°C)</li>
+                                <li>Significant weight gain (more than 5 lbs in a week)</li>
+                                <li>Increased swelling</li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-red-50 border-l-4 border-red-500 p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">Severe Symptoms (Seek Emergency Care)</h4>
+                            <ul class="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                                <li>Chest pain or difficulty breathing</li>
+                                <li>Severe abdominal pain</li>
+                                <li>Blood in urine or stool</li>
+                                <li>Confusion or severe dizziness</li>
+                                <li>Severe headache with vision changes</li>
+                                <li>Signs of severe infection</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">When to Contact Your Care Team</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Don't hesitate to reach out if you experience:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Any new or worsening symptoms</li>
+                        <li>Questions about medication side effects</li>
+                        <li>Concerns about infection exposure</li>
+                        <li>Difficulty taking medications as prescribed</li>
+                        <li>Emotional or mental health concerns</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Managing Minor Side Effects at Home</h3>
+                    <div class="space-y-4">
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">For Nausea:</h4>
+                            <p class="text-gray-700 text-sm">Take medications with food, eat small frequent meals, avoid strong odors</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">For Headaches:</h4>
+                            <p class="text-gray-700 text-sm">Stay hydrated, rest in a quiet dark room, use approved pain relievers only</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">For Skin Changes:</h4>
+                            <p class="text-gray-700 text-sm">Use gentle skincare products, apply sunscreen daily, moisturize regularly</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mt-8">
+                        <p class="text-sm text-blue-900"><strong>Remember:</strong> Your transplant team is here to help. It's always better to ask questions than to worry in silence.</p>
+                    </div>
+                `
+            },
+            4: {
+                title: "Infection Prevention After Kidney Transplant",
+                category: ["Infection Prevention", "Post-Transplant Care"],
+                categoryColors: ["bg-rose-100 text-rose-700", "bg-blue-100 text-blue-700"],
+                date: "October 12, 2025",
+                readTime: "6 min read",
+                content: `
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">Protecting Yourself from Infections</h2>
+                    
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        After your kidney transplant, your immune system is intentionally suppressed to prevent rejection of your new kidney. While this is essential for transplant success, it also means you're more vulnerable to infections. Learning how to protect yourself is a critical part of your post-transplant care.
+                    </p>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Temperature Monitoring</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Regular temperature checks help detect infections early:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Check your temperature if you feel unwell or feverish</li>
+                        <li>A temperature above 100.4°F (38°C) requires immediate medical attention</li>
+                        <li>Keep a thermometer readily available at home</li>
+                        <li>Record your temperature readings, especially if you're feeling sick</li>
+                        <li>Even a low-grade fever can be significant - don't ignore it</li>
+                    </ul>
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+                        <p class="text-sm text-red-900"><strong>Important:</strong> If you develop a fever (>100.4°F/38°C), contact your transplant team immediately, even if it's after hours.</p>
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Hand Hygiene</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Proper hand washing is your first line of defense against infection:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Wash hands with soap and water for at least 20 seconds</li>
+                        <li>Always wash before eating, after using the bathroom, and after being in public</li>
+                        <li>Use alcohol-based hand sanitizer when soap isn't available (at least 60% alcohol)</li>
+                        <li>Carry hand sanitizer with you when going out</li>
+                        <li>Avoid touching your face, especially your eyes, nose, and mouth</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Safe Social Interactions</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        You can maintain a social life while protecting your health:
+                    </p>
+                    <div class="space-y-4 mb-6">
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2 flex items-center">
+                                <svg class="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Safe Activities
+                            </h4>
+                            <ul class="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                                <li>Small gatherings with healthy family and friends</li>
+                                <li>Outdoor activities with good ventilation</li>
+                                <li>Virtual meetings and video calls</li>
+                                <li>One-on-one visits with people you trust</li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-yellow-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2 flex items-center">
+                                <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.864-.833-2.634 0L4.18 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                </svg>
+                                Situations to Avoid
+                            </h4>
+                            <ul class="list-disc pl-6 space-y-1 text-sm text-gray-700">
+                                <li>Crowded indoor spaces, especially during flu season</li>
+                                <li>Contact with people who are sick or recently vaccinated with live vaccines</li>
+                                <li>Sharing food, drinks, or utensils with others</li>
+                                <li>Large public gatherings (concerts, sporting events)</li>
+                                <li>Exposure to people with chickenpox, shingles, or measles</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Food Safety</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Foodborne illnesses can be serious for transplant recipients:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Avoid raw or undercooked meats, fish, and eggs</li>
+                        <li>Don't eat unpasteurized dairy products or juices</li>
+                        <li>Wash all fruits and vegetables thoroughly</li>
+                        <li>Avoid buffets and salad bars</li>
+                        <li>Ensure food is cooked to proper temperatures</li>
+                        <li>Refrigerate leftovers promptly and consume within 2-3 days</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Home Environment</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Keep your living space clean and safe:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Clean and disinfect frequently touched surfaces daily</li>
+                        <li>Use separate towels and avoid sharing personal items</li>
+                        <li>Change bed linens at least weekly</li>
+                        <li>Avoid gardening or handling soil (risk of fungal infections)</li>
+                        <li>Keep pets clean and up-to-date on vaccinations</li>
+                        <li>Wash hands after handling pets or cleaning litter boxes</li>
+                    </ul>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Recognizing Warning Signs</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Contact your transplant team immediately if you experience:
+                    </p>
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+                        <ul class="list-disc pl-6 space-y-1 text-sm text-red-900">
+                            <li>Fever above 100.4°F (38°C)</li>
+                            <li>Chills or night sweats</li>
+                            <li>Cough, shortness of breath, or chest pain</li>
+                            <li>Burning or pain with urination</li>
+                            <li>Unusual drainage from surgical sites</li>
+                            <li>Persistent diarrhea or vomiting</li>
+                            <li>Unusual fatigue or weakness</li>
+                            <li>Any signs of infection at your incision sites</li>
+                        </ul>
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">Vaccinations</h3>
+                    <p class="text-gray-700 mb-4 leading-relaxed">
+                        Stay protected with appropriate vaccines:
+                    </p>
+                    <ul class="list-disc pl-6 space-y-2 text-gray-700 mb-6">
+                        <li>Get annual flu vaccine (inactivated, not live vaccine)</li>
+                        <li>Ensure household members are vaccinated</li>
+                        <li>Avoid live vaccines (such as MMR, varicella, nasal flu vaccine)</li>
+                        <li>Discuss COVID-19 vaccination with your transplant team</li>
+                        <li>Keep all routine vaccinations up to date as recommended</li>
+                    </ul>
+
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mt-8">
+                        <p class="text-sm text-blue-900"><strong>Remember:</strong> Infection prevention is a daily practice. These precautions become second nature over time and are essential for protecting your new kidney and maintaining your health.</p>
+                    </div>
+                `
+            }
+        };
+
+        // Get article ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const articleId = urlParams.get('id') || '1';
+
+        // Load article content
+        function loadArticle() {
+            const article = articles[articleId];
+            if (!article) {
+                document.getElementById('articleContent').innerHTML = '<p class="text-red-600">Article not found</p>';
+                return;
+            }
+
+            const categoryTags = article.category.map((cat, index) => 
+                `<span class="px-3 py-1 ${article.categoryColors[index]} text-xs font-medium rounded-full">${cat}</span>`
+            ).join('');
+
+            const articleHTML = `
+                <div class="mb-6">
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        ${categoryTags}
+                    </div>
+                    <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">${article.title}</h1>
+                    <div class="flex items-center gap-4 text-sm text-gray-500">
+                        <span class="flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                            ${article.date}
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            ${article.readTime}
+                        </span>
+                    </div>
+                </div>
+                <div class="prose prose-sm md:prose-base max-w-none">
+                    ${article.content}
+                </div>
+            `;
+
+            document.getElementById('articleContent').innerHTML = articleHTML;
+            loadRelatedArticles();
+        }
+
+        // Load related articles
+        function loadRelatedArticles() {
+            const relatedHTML = Object.entries(articles)
+                .filter(([id]) => id !== articleId)
+                .slice(0, 2)
+                .map(([id, article]) => `
+                    <div class="bg-white rounded-lg shadow-sm p-5 cursor-pointer hover:shadow-md transition" onclick="window.location.href='article-detail.html?id=${id}'">
+                        <div class="flex gap-2 mb-3">
+                            <span class="px-2 py-1 ${article.categoryColors[0]} text-xs font-medium rounded-full">${article.category[0]}</span>
+                        </div>
+                        <h4 class="font-semibold text-gray-900 mb-2 hover:text-blue-600 transition">${article.title}</h4>
+                        <div class="flex items-center gap-3 text-xs text-gray-500">
+                            <span>${article.date}</span>
+                            <span>•</span>
+                            <span>${article.readTime}</span>
+                        </div>
+                    </div>
+                `).join('');
+
+            document.getElementById('relatedArticles').innerHTML = relatedHTML;
+        }
+
+        // Initialize
+        loadArticle();
+    </script>
+</body>
+</html>

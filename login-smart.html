@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SMART Login</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; margin: 24px; }
+    button { padding: 10px 16px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>SMART on FHIR Login (Sandbox)</h1>
+  <p>Click the button below to sign in with SMART and load FHIR data. For patient role testing (Patient Standalone Launch), the scope will request patient-level read permissions.</p>
+
+  <div style="margin-top:20px; max-width:420px;">
+    <label for="mode" style="display:block; margin-bottom:6px; font-weight:600;">Choose a login mode</label>
+    <select id="mode" style="width:100%; padding:8px; font-size:15px;">
+      <option value="standalone" selected>Default sandbox (Standalone)</option>
+      <option value="launcher">Use SMART Launcher (requires official launcher)</option>
+    </select>
+
+    <div id="issuerBlock" style="margin-top:16px; display:none;">
+      <label for="issuer" style="display:block; margin-bottom:6px; font-weight:600;">FHIR Issuer</label>
+      <input id="issuer" type="text" style="width:100%; padding:8px; font-size:15px;" placeholder="https://launch.smarthealthit.org/v/r4/fhir" />
+      <small style="color:#555;">Enter the FHIR server if you are not launching from the SMART Launcher.</small>
+    </div>
+  </div>
+
+  <button id="login" style="margin-top:24px;">Login with SMART</button>
+  <p id="hint" style="margin-top:16px; color:#555; font-size:14px;"></p>
+  <div id="patientSelectBlock" style="margin-top:24px; display:none; max-width:640px;">
+    <h2 style="font-size:18px; margin:0 0 8px;">(Optional) Pick a Patient</h2>
+
+    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+      <div style="flex:1 1 260px;">
+        <label for="patientSearch" style="display:block; font-size:13px; margin-bottom:4px;">FHIR Name Search</label>
+        <input id="patientSearch" type="text" placeholder="e.g., Smith / Smith Chang" style="width:100%; padding:8px; font-size:14px;" />
+        <small style="display:block; margin-top:4px; font-size:11px; color:#666; line-height:1.3;">
+          Enter 1 word: use family:contains (for partial surname match);<br>
+          Enter 2 words (separated by a space) → parse as given + family, <br>
+          e.g., "Barney Abbott" → ?given=Barney&family=Abbott.<br>  
+          If left blank, a list of unfiltered sample patients will be loaded (up to 20).
+        </small>
+      </div>
+      <div>
+        <button id="btnLoadPatients" type="button" style="padding:8px 14px; font-size:14px;">Load Patient List</button>
+      </div>
+      <div style="flex:1 1 200px;">
+        <label for="patientSelect" style="display:block; font-size:13px; margin-bottom:4px;">patient list (max 20)</label>
+        <select id="patientSelect" size="6" style="width:100%; padding:4px; font-size:13px;">
+        </select>
+      </div>
+      <div style="flex:1 1 220px;">
+        <label for="manualPid" style="display:block; font-size:13px; margin-bottom:4px;">Or input patientId</label>
+        <input id="manualPid" type="text" placeholder="例如 12345" style="width:100%; padding:8px; font-size:14px;" />
+      </div>
+    </div>
+    <div id="patientLoadStatus" style="margin-top:8px; font-size:12px; color:#666;"></div>
+    <div id="chosenPatient" style="margin-top:8px; font-size:13px; color:#0a5; display:none;"></div>
+  </div>
+  
+    <div id="practitionerSelectBlock" style="margin-top:24px; display:none; max-width:640px;">
+      <h2 style="font-size:18px; margin:0 0 8px;">Pick a Practitioner (Launcher Mode)</h2>
+      <p style="margin:0 0 12px; font-size:13px; color:#555;">We filter patients with SNOMED CT code 70536003 (Diabetes mellitus type 2) and list their general practitioners from the public HAPI FHIR server.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+        <div>
+          <button id="btnLoadPractitioners" type="button" style="padding:8px 14px; font-size:14px;">Reload Practitioner List</button>
+        </div>
+        <div style="flex:1 1 260px;">
+          <label for="practitionerSelect" style="display:block; font-size:13px; margin-bottom:4px;">Practitioners (SNOMED 70536003)</label>
+          <select id="practitionerSelect" size="6" style="width:100%; padding:4px; font-size:13px;"></select>
+        </div>
+      </div>
+      <div id="practitionerStatus" style="margin-top:8px; font-size:12px; color:#666;"></div>
+      <div id="chosenPractitioner" style="margin-top:8px; font-size:13px; color:#0a5; display:none;"></div>
+    </div>
+
+  <!-- Use CDN build of fhirclient: no bundler required -->
+  <script type="module">
+    import FHIR from "https://cdn.skypack.dev/fhirclient@2.6.3";
+
+    const params = new URLSearchParams(window.location.search);
+    const issParam = params.get("iss");
+    const launchParam = params.get("launch");
+    const clientParam = params.get("client_id") || "my-smart-web-app";
+  // Default scopes: include patient-level resource reads so we can fetch demographics & vitals
+  // 可依需要增減 (寫入時需向 Launcher 勾選相容權限)
+  const scopeParam = params.get("scope") || "launch/patient openid fhirUser profile offline_access patient/Patient.read patient/Observation.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Condition.read patient/QuestionnaireResponse.read";
+    const audParam = params.get("aud");
+    const defaultStandaloneIss = "https://r4.smarthealthit.org";
+
+    const modeSelect = document.getElementById("mode");
+    const issuerBlock = document.getElementById("issuerBlock");
+    const issuerInput = document.getElementById("issuer");
+    const hint = document.getElementById("hint");
+    const patientSelectBlock = document.getElementById('patientSelectBlock');
+    const patientSelect = document.getElementById('patientSelect');
+    const patientSearch = document.getElementById('patientSearch');
+    const btnLoadPatients = document.getElementById('btnLoadPatients');
+    const manualPid = document.getElementById('manualPid');
+    const patientLoadStatus = document.getElementById('patientLoadStatus');
+    const chosenPatient = document.getElementById('chosenPatient');
+      const practitionerSelectBlock = document.getElementById('practitionerSelectBlock');
+      const practitionerSelect = document.getElementById('practitionerSelect');
+      const practitionerStatus = document.getElementById('practitionerStatus');
+      const chosenPractitioner = document.getElementById('chosenPractitioner');
+      const btnLoadPractitioners = document.getElementById('btnLoadPractitioners');
+
+    // Restore previous manual selection if any
+    const prev = localStorage.getItem('preselected_patient_id');
+    if (prev) {
+      manualPid.value = prev;
+      chosenPatient.style.display = 'block';
+      chosenPatient.textContent = 'Preselected: ' + prev;
+    }
+      
+      const storedPractitionerRaw = localStorage.getItem('practitioner_data');
+      let storedPractitioner = null;
+      try {
+        storedPractitioner = storedPractitionerRaw ? JSON.parse(storedPractitionerRaw) : null;
+      } catch (err) {
+        storedPractitioner = null;
+      }
+      
+      const practitionerDetailsMap = new Map();
+      let practitionerLoaded = false;
+      let practitionerLoading = false;
+
+    function updateHint() {
+      if (modeSelect.value === "launcher") {
+        issuerBlock.style.display = "block";
+        issuerInput.value = issuerInput.value || issParam || "https://launch.smarthealthit.org/v/r4/fhir";
+        hint.textContent = issParam
+          ? `Using SMART Launcher issuer iss=${issParam}${launchParam ? ", launch parameter detected" : ""}`
+          : "Not launched from SMART Launcher yet. Click Launch in the official tool or enter the issuer manually.";
+        patientSelectBlock.style.display = 'none';
+          practitionerSelectBlock.style.display = 'block';
+          loadPractitioners();
+      } else {
+        issuerBlock.style.display = "none";
+        hint.textContent = `Using default standalone sandbox: ${defaultStandaloneIss}`;
+        patientSelectBlock.style.display = 'block';
+          practitionerSelectBlock.style.display = 'none';
+      }
+    }
+
+    updateHint();
+    modeSelect.addEventListener("change", updateHint);
+      
+      function describePractitioner(prac) {
+        if (!prac) return '(unknown practitioner)';
+        const primaryName = (prac.name && prac.name[0]) || {};
+        const asArray = (value) => Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
+        const givenArr = asArray(primaryName.given ?? prac.given);
+        const prefixArr = asArray(primaryName.prefix ?? prac.prefix);
+        const family = (primaryName.family ?? prac.family ?? '').toString();
+        const displayParts = [...prefixArr, ...givenArr, family].map(part => part.trim()).filter(Boolean);
+        const fallbackText = primaryName.text || prac.text || prac.display || '(no name)';
+        const displayName = displayParts.join(' ') || fallbackText;
+        return `${displayName.trim()} (${prac.id || prac.reference || 'no-id'})`;
+      }
+      
+      async function loadPractitioners(force = false) {
+        if (practitionerLoading) return;
+        if (practitionerLoaded && !force) {
+          if (storedPractitioner) {
+            applyStoredPractitioner();
+          }
+          return;
+        }
+        
+        practitionerLoading = true;
+        practitionerStatus.textContent = 'Loading practitioner list...';
+        practitionerSelect.innerHTML = '';
+        practitionerDetailsMap.clear();
+        
+        try {
+          const patientUrl = 'https://hapi.fhir.org/baseR4/Patient?_has:Condition:subject:code=http://snomed.info/sct|70536003&_count=200';
+          const patientResp = await fetch(patientUrl);
+          if (!patientResp.ok) throw new Error('Patient query failed (HTTP ' + patientResp.status + ')');
+          const patientBundle = await patientResp.json();
+          const practitionerIds = new Set();
+          
+          (patientBundle.entry || []).forEach(entry => {
+            const patient = entry.resource;
+            if (!patient || patient.resourceType !== 'Patient') return;
+            (patient.generalPractitioner || []).forEach(pr => {
+              if (!pr.reference) return;
+              const match = pr.reference.match(/Practitioner\/(.+)$/);
+              if (match && match[1]) practitionerIds.add(match[1]);
+            });
+          });
+          
+          if (practitionerIds.size === 0) {
+            practitionerStatus.textContent = 'No practitioners found for the selected condition.';
+            practitionerLoaded = true;
+            return;
+          }
+          
+          const idList = Array.from(practitionerIds);
+          const fetches = idList.map(async id => {
+            const url = `https://hapi.fhir.org/baseR4/Practitioner/${encodeURIComponent(id)}`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('Failed to fetch practitioner ' + id + ' (HTTP ' + resp.status + ')');
+            const practitioner = await resp.json();
+            practitionerDetailsMap.set(id, practitioner);
+          });
+          
+          await Promise.all(fetches);
+          
+          const sorted = Array.from(practitionerDetailsMap.values()).sort((a, b) => {
+            const nameA = describePractitioner(a).toLowerCase();
+            const nameB = describePractitioner(b).toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
+          
+          sorted.forEach(prac => {
+            const option = document.createElement('option');
+            option.value = prac.id || '';
+            option.textContent = describePractitioner(prac);
+            practitionerSelect.appendChild(option);
+          });
+          
+          practitionerStatus.textContent = `Loaded ${sorted.length} practitioners (SNOMED 70536003).`;
+          practitionerLoaded = true;
+          
+          if (storedPractitioner) {
+            applyStoredPractitioner();
+          }
+        } catch (err) {
+          practitionerStatus.textContent = 'Failed to load practitioners: ' + err.message;
+        } finally {
+          practitionerLoading = false;
+        }
+      }
+      
+      function applyStoredPractitioner() {
+        if (!storedPractitioner) return;
+        const option = Array.from(practitionerSelect.options).find(opt => opt.value === storedPractitioner.id);
+        if (option) {
+          practitionerSelect.value = storedPractitioner.id;
+          chosenPractitioner.style.display = 'block';
+          const desc = storedPractitioner.display || describePractitioner(storedPractitioner);
+          chosenPractitioner.textContent = 'Preselected: ' + desc;
+        }
+      }
+      
+      function persistPractitionerSelection(id) {
+        if (!id) {
+          localStorage.removeItem('practitioner_data');
+          chosenPractitioner.style.display = 'none';
+          return;
+        }
+        const practitioner = practitionerDetailsMap.get(id);
+        if (!practitioner) return;
+        
+        const nameObj = (practitioner.name && practitioner.name[0]) || {};
+        const data = {
+          id: practitioner.id || id,
+          name: [{
+            given: Array.isArray(nameObj.given) ? nameObj.given.filter(Boolean) : (nameObj.given ? [nameObj.given] : []),
+            family: nameObj.family || '',
+            prefix: Array.isArray(nameObj.prefix) ? nameObj.prefix.filter(Boolean) : (nameObj.prefix ? [nameObj.prefix] : []),
+            text: nameObj.text || ''
+          }],
+          display: describePractitioner(practitioner)
+        };
+        
+        localStorage.setItem('practitioner_data', JSON.stringify(data));
+        chosenPractitioner.style.display = 'block';
+        chosenPractitioner.textContent = 'Selected: ' + describePractitioner(practitioner);
+        storedPractitioner = data;
+      }
+
+    async function fetchPatients() {
+      patientLoadStatus.textContent = 'Loading...';
+      patientSelect.innerHTML = '';
+      try {
+        const rawInput = patientSearch.value.trim();
+        const params = new URLSearchParams();
+        params.set('_count','20');
+        if (rawInput) {
+          // 分析輸入：若含有空白，拆成多個 token，取前兩個: given + family
+          const tokens = rawInput.split(/\s+/).filter(Boolean);
+            if (tokens.length >= 2) {
+              // 例: Barney Abbott -> given=Barney & family=Abbott
+              params.set('given', tokens[0]);
+              params.set('family', tokens[1]);
+            } else {
+              // 單 token: 保留原本 family:contains 模式 (寬鬆)
+              params.set('family:contains', tokens[0]);
+            }
+        }
+        // 選擇 r4.smarthealthit.org Patient endpoint (使用 sandbox FHIR base 而非 HAPI public base)
+        // r4.smarthealthit.org 是 SMART sandbox aggregator，直接查 Patient
+        const resp = await fetch(`https://r4.smarthealthit.org/Patient?${params.toString()}`);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const bundle = await resp.json();
+        if (!Array.isArray(bundle.entry) || bundle.entry.length === 0) {
+          patientLoadStatus.textContent = 'No results';
+          return;
+        }
+        bundle.entry.forEach(e => {
+          const p = e.resource;
+          if (p.resourceType !== 'Patient') return;
+          const opt = document.createElement('option');
+          const nameObj = (p.name && p.name[0]) || {};
+          const given = Array.isArray(nameObj.given) ? nameObj.given.filter(Boolean).join(' ') : nameObj.given || '';
+          const displayName = nameObj.text || [given, nameObj.family].filter(Boolean).join(' ') || '(no name)';
+          opt.value = p.id;
+          // 顯示格式: 名字 (ID) | gender | birthDate
+          opt.textContent = `${displayName} (${p.id}) | ${p.gender || '-'} | ${p.birthDate || '-'}`;
+          patientSelect.appendChild(opt);
+        });
+        patientLoadStatus.textContent = `Loaded ${bundle.entry.length} entries (query=${decodeURIComponent(params.toString())})`;
+      } catch (err) {
+        patientLoadStatus.textContent = 'Failed: ' + err.message;
+      }
+    }
+
+    btnLoadPatients?.addEventListener('click', fetchPatients);
+    patientSelect?.addEventListener('change', () => {
+      manualPid.value = patientSelect.value;
+      // Extract name (before first parenthesis)
+      const selText = patientSelect.options[patientSelect.selectedIndex]?.text || '';
+      const nameMatch = selText.split('(')[0].trim();
+      localStorage.setItem('preselected_patient_id', manualPid.value);
+      if (nameMatch) localStorage.setItem('preselected_patient_name', nameMatch);
+      chosenPatient.style.display = 'block';
+      chosenPatient.textContent = 'Preselected: ' + (nameMatch ? `${nameMatch} (${manualPid.value})` : manualPid.value);
+    });
+    manualPid?.addEventListener('input', () => {
+      if (manualPid.value.trim()) {
+        localStorage.setItem('preselected_patient_id', manualPid.value.trim());
+        localStorage.removeItem('preselected_patient_name'); // unknown name for manual raw id
+        chosenPatient.style.display = 'block';
+        chosenPatient.textContent = 'Preselected: ' + manualPid.value.trim();
+      } else {
+        localStorage.removeItem('preselected_patient_id');
+        localStorage.removeItem('preselected_patient_name');
+        chosenPatient.style.display = 'none';
+      }
+    });
+      
+      btnLoadPractitioners?.addEventListener('click', () => loadPractitioners(true));
+      practitionerSelect?.addEventListener('change', () => {
+        const selectedId = practitionerSelect.value;
+        persistPractitionerSelection(selectedId);
+      });
+
+    document.getElementById("login").addEventListener("click", () => {
+      const mode = modeSelect.value;
+      const options = {
+        clientId: clientParam,
+        redirectUri: `${window.location.origin}/callback.html`,
+        scope: scopeParam,
+      };
+
+      if (mode === "launcher") {
+        const issuer = issuerInput.value.trim() || issParam;
+        if (!issuer) {
+          alert("Please launch via SMART Launcher first or enter a FHIR issuer.");
+          return;
+        }
+        options.iss = issuer;
+        options.aud = audParam || issuer;
+        if (launchParam) options.launch = launchParam;
+      } else {
+        options.iss = defaultStandaloneIss;
+        options.aud = defaultStandaloneIss;
+      }
+
+      // 單純 fallback: 在 standalone 模式若 SMART 回來沒有 patient, callback 會讀 preselected_patient_id
+      if (mode !== 'launcher') {
+        const chosen = manualPid.value.trim();
+        if (chosen) localStorage.setItem('preselected_patient_id', chosen);
+      }
+
+      FHIR.oauth2.authorize(options);
+    });
+  </script>
+</body>
+</html>

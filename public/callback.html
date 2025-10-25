@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Authorization Successful - Ever Healthier</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .animate-spin {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .animate-pulse {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in {
+      animation: fadeIn 0.5s ease-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+  
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-lg gradient-bg flex items-center justify-center">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z">
+            </path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">Ever Healthier</h1>
+          <p class="text-xs text-gray-500">Authorization Processing</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    
+    <!-- Success Card -->
+    <div id="successCard" class="bg-white rounded-2xl shadow-lg overflow-hidden fade-in">
+      <div class="p-8">
+        <!-- Success Icon -->
+        <div class="flex justify-center mb-6">
+          <div class="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
+            <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Title -->
+        <h2 class="text-3xl font-bold text-center text-gray-900 mb-3">
+          Authorization Successful!
+        </h2>
+
+        <!-- Status Message -->
+        <div id="meta" class="text-center text-gray-600 mb-6">
+          Processing authorization information...
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="flex justify-center items-center space-x-2 mb-6">
+          <div class="w-2 h-2 bg-indigo-600 rounded-full animate-pulse"></div>
+          <div class="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" style="animation-delay: 0.2s;"></div>
+          <div class="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" style="animation-delay: 0.4s;"></div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-gray-200 rounded-full h-2 mb-6">
+          <div id="progressBar" class="bg-gradient-to-r from-indigo-600 to-purple-600 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+
+        <!-- Info Box -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm text-blue-700">
+                Please wait while we redirect you to the user selection page...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Card (Hidden by default) -->
+    <div id="errorCard" class="bg-white rounded-2xl shadow-lg overflow-hidden hidden">
+      <div class="p-8">
+        <div class="flex justify-center mb-6">
+          <div class="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center">
+            <svg class="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+        </div>
+        <h2 class="text-3xl font-bold text-center text-gray-900 mb-3">
+          Authorization Error
+        </h2>
+        <div id="errorMessage" class="text-center text-red-600 mb-6"></div>
+        <div class="text-center">
+          <a href="/login.html" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-200">
+            Return to Login
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Debug Info (Collapsible) -->
+    <div class="mt-6">
+      <details class="bg-white rounded-lg shadow-md">
+        <summary class="px-6 py-4 cursor-pointer hover:bg-gray-50 transition duration-200 rounded-lg font-medium text-gray-700">
+          <span class="inline-flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+            </svg>
+            View Authorization Details (Debug)
+          </span>
+        </summary>
+        <div class="px-6 py-4 border-t border-gray-200">
+          <pre id="raw" class="bg-gray-50 p-4 rounded-lg text-xs overflow-auto max-h-96 text-gray-800"></pre>
+        </div>
+      </details>
+    </div>
+
+  </main>
+
+  <script type="module">
+    import FHIR from "https://cdn.skypack.dev/fhirclient@2.6.3";
+
+    const meta = document.getElementById("meta");
+    const raw = document.getElementById("raw");
+    const progressBar = document.getElementById("progressBar");
+    const loadingIndicator = document.getElementById("loadingIndicator");
+    const successCard = document.getElementById("successCard");
+    const errorCard = document.getElementById("errorCard");
+    const errorMessage = document.getElementById("errorMessage");
+
+    // Animate progress bar
+    function animateProgress(targetPercent, duration) {
+      const startTime = Date.now();
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min((elapsed / duration) * targetPercent, targetPercent);
+        progressBar.style.width = progress + '%';
+        if (progress < targetPercent) {
+          requestAnimationFrame(animate);
+        }
+      };
+      animate();
+    }
+
+    // Start initial progress
+    animateProgress(30, 500);
+
+    FHIR.oauth2.ready().then(async client => {
+      // Update progress
+      animateProgress(60, 300);
+      
+      // Read user and patient resources
+      const user = await client.user.read().catch(() => null);
+      const patient = await client.patient.read().catch(() => null);
+
+      const tokenResponse = client.state?.tokenResponse || {};
+      const accessToken = tokenResponse.access_token || tokenResponse.id_token || `smart-${Date.now()}`;
+
+      // Save FHIR client state to localStorage
+      const fhirState = {
+        serverUrl: client.state?.serverUrl || client.state?.server?.url || 'https://r4.smarthealthit.org',
+        tokenResponse: tokenResponse,
+        clientId: client.state?.clientId || 'my-smart-web-app',
+        scope: tokenResponse.scope || ''
+      };
+
+      try {
+        localStorage.setItem('fhir_client_state', JSON.stringify(fhirState));
+        localStorage.setItem('auth_token', JSON.stringify(accessToken));
+      } catch (storageError) {
+        console.error('Failed to store authorization info:', storageError);
+      }
+
+      // Update progress
+      animateProgress(90, 300);
+
+      // Display debug information
+      raw.textContent = JSON.stringify({ 
+        user: user ? { id: user.id, resourceType: user.resourceType, name: user.name } : null,
+        patient: patient ? { id: patient.id, resourceType: patient.resourceType, name: patient.name } : null,
+        tokenResponse: { 
+          scope: tokenResponse.scope,
+          token_type: tokenResponse.token_type,
+          expires_in: tokenResponse.expires_in 
+        },
+        serverUrl: fhirState.serverUrl
+      }, null, 2);
+      
+      meta.innerHTML = '<span class="text-green-600 font-medium">✓ Authorization verified successfully!</span><br><span class="text-sm text-gray-500 mt-1 block">Redirecting to user selection...</span>';
+      
+      // Complete progress
+      animateProgress(100, 200);
+      
+      // Redirect to user selection page
+      setTimeout(() => {
+        window.location.href = '/select-user.html';
+      }, 1500);
+      
+    }).catch(e => {
+      // Hide success card, show error card
+      successCard.classList.add('hidden');
+      errorCard.classList.remove('hidden');
+      errorCard.classList.add('fade-in');
+      
+      errorMessage.innerHTML = `<strong>Error:</strong> ${e.message}`;
+      console.error('FHIR OAuth2 error:', e);
+      
+      // Still show debug info
+      raw.textContent = JSON.stringify({ 
+        error: e.message,
+        stack: e.stack 
+      }, null, 2);
+    });
+  </script>
+</body>
+</html>

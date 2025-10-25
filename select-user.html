@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select User - Ever Healthier</title>
+  <script src="config.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .card-hover {
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .card-hover:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-lg gradient-bg flex items-center justify-center">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z">
+            </path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">Ever Healthier</h1>
+          <p class="text-xs text-gray-500">Select Your Identity</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+
+    <!-- Authorization Success Message -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
+        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+      <h2 class="text-3xl font-bold text-gray-900 mb-2">OAuth2 Authorization Successful!</h2>
+      <p id="roleText" class="text-lg text-gray-600"></p>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center py-12">
+      <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <p class="mt-4 text-gray-600">Loading available users...</p>
+    </div>
+
+    <!-- Error Message -->
+    <div id="errorState" class="hidden">
+      <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clip-rule="evenodd" />
+            </svg>
+          </div>
+          <div class="ml-3">
+            <p class="text-sm text-red-700" id="errorMessage"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div id="searchContainer" class="hidden mb-8">
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Search for Users</h3>
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <input 
+              type="text" 
+              id="searchInput" 
+              placeholder="Enter name to search (e.g., 'Smith' or 'John Smith')..." 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+            <p class="text-xs text-gray-500 mt-2">
+              <strong>Search tips:</strong> Enter first name, last name, or both. Leave empty to show all available users.
+            </p>
+          </div>
+          <button 
+            id="searchButton" 
+            class="px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition duration-200"
+          >
+            Search
+          </button>
+          <button 
+            id="clearButton" 
+            class="px-6 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition duration-200"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Selection List -->
+    <div id="userListContainer" class="hidden">
+      <div class="flex justify-between items-center mb-6">
+        <p class="text-gray-600">Please select the identity you want to login with:</p>
+        <p class="text-sm text-gray-500" id="resultCount"></p>
+      </div>
+      <div id="userList" class="grid md:grid-cols-2 gap-4"></div>
+    </div>
+
+  </main>
+
+  <script type="module">
+    import FHIR from "https://cdn.skypack.dev/fhirclient@2.6.3";
+
+    const roleText = document.getElementById('roleText');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+    const errorMessage = document.getElementById('errorMessage');
+    const searchContainer = document.getElementById('searchContainer');
+    const searchInput = document.getElementById('searchInput');
+    const searchButton = document.getElementById('searchButton');
+    const clearButton = document.getElementById('clearButton');
+    const userListContainer = document.getElementById('userListContainer');
+    const userList = document.getElementById('userList');
+    const resultCount = document.getElementById('resultCount');
+
+    // Read selected role from localStorage
+    const selectedRole = localStorage.getItem('selected_role') || 'patient';
+    
+    // Global FHIR client
+    let fhirClient = null;
+
+    // Display role
+    if (selectedRole === 'practitioner') {
+      roleText.textContent = 'Your selected role: Practitioner';
+    } else {
+      roleText.textContent = 'Your selected role: Patient';
+    }
+
+    // Helper function: Format name
+    function formatName(resource) {
+      if (!resource || !resource.name || !resource.name[0]) {
+        return '(Unnamed)';
+      }
+      const name = resource.name[0];
+      const given = Array.isArray(name.given) ? name.given.join(' ') : (name.given || '');
+      const family = name.family || '';
+      const prefix = Array.isArray(name.prefix) ? name.prefix.join(' ') : (name.prefix || '');
+      
+      return [prefix, given, family].filter(Boolean).join(' ') || name.text || '(Unnamed)';
+    }
+
+    // Helper function: Format patient info
+    function formatPatientInfo(patient) {
+      const info = [];
+      if (patient.gender) {
+        const genderMap = { male: 'Male', female: 'Female', other: 'Other', unknown: 'Unknown' };
+        info.push(genderMap[patient.gender] || patient.gender);
+      }
+      if (patient.birthDate) {
+        info.push(`Birth Date: ${patient.birthDate}`);
+      }
+      return info.length > 0 ? info.join(' · ') : '';
+    }
+
+    // Helper function: Create user card
+    function createUserCard(resource, role) {
+      const card = document.createElement('div');
+      card.className = 'bg-white rounded-lg shadow-md p-6 card-hover';
+      
+      const name = formatName(resource);
+      const id = resource.id || 'unknown';
+      
+      let extraInfo = '';
+      let iconColor = 'bg-blue-100 text-blue-600';
+      let icon = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>`;
+      
+      if (role === 'practitioner') {
+        iconColor = 'bg-purple-100 text-purple-600';
+        icon = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>`;
+        
+        // Try to display professional information
+        if (resource.qualification && resource.qualification.length > 0) {
+          const qual = resource.qualification[0];
+          if (qual.code && qual.code.text) {
+            extraInfo = `<p class="text-sm text-gray-500 mt-1">${qual.code.text}</p>`;
+          }
+        }
+      } else {
+        extraInfo = `<p class="text-sm text-gray-500 mt-1">${formatPatientInfo(resource)}</p>`;
+      }
+      
+      card.innerHTML = `
+        <div class="flex items-start">
+          <div class="w-12 h-12 rounded-full ${iconColor} flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              ${icon}
+            </svg>
+          </div>
+          <div class="ml-4 flex-1">
+            <h3 class="text-lg font-semibold text-gray-900">${name}</h3>
+            <p class="text-sm text-gray-500">ID: ${id}</p>
+            ${extraInfo}
+          </div>
+        </div>
+      `;
+      
+      // Save selection and redirect when card is clicked
+      card.addEventListener('click', () => {
+        selectUser(resource, role);
+      });
+      
+      return card;
+    }
+
+    // Select user and redirect
+    function selectUser(resource, role) {
+      if (!fhirClient) {
+        console.error('FHIR client not initialized');
+        alert('Error: FHIR client not ready. Please try again.');
+        return;
+      }
+      
+      // Get FHIR client state - use the live client state
+      const clientState = fhirClient.state || {};
+      const tokenResponse = clientState.tokenResponse || {};
+      
+      // Create user data structure compatible with dashboard expectations
+      const userData = {
+        id: resource.id,
+        name: formatName(resource),
+        role: role === 'practitioner' ? 'clinic' : 'patient',
+        resourceType: resource.resourceType,
+        resource: resource,
+        // Add FHIR context for dashboard compatibility
+        fhir: {
+          issuer: clientState.serverUrl || 'https://r4.smarthealthit.org',
+          user: role === 'practitioner' ? resource : null,
+          patient: role === 'patient' ? resource : null,
+          patientId: role === 'patient' ? resource.id : null,
+          practitionerId: role === 'practitioner' ? resource.id : null,
+          scope: tokenResponse.scope || clientState.scope || '',
+          serverUrl: clientState.serverUrl || 'https://r4.smarthealthit.org',
+          tokenResponse: tokenResponse,
+          clientId: clientState.clientId || 'my-smart-web-app'
+        }
+      };
+      
+      // Also store the complete FHIR client state for future use
+      const fhirStateToStore = {
+        serverUrl: clientState.serverUrl || 'https://r4.smarthealthit.org',
+        tokenResponse: tokenResponse,
+        clientId: clientState.clientId || 'my-smart-web-app',
+        scope: tokenResponse.scope || clientState.scope || '',
+        key: clientState.key // Important: store the state key for session restoration
+      };
+      
+      // Save to localStorage with multiple keys for compatibility
+      localStorage.setItem('selected_user', JSON.stringify(userData));
+      localStorage.setItem('user_data', JSON.stringify(userData)); // For common.js
+      localStorage.setItem('user_role', JSON.stringify(userData.role));
+      localStorage.setItem('fhir_client_state', JSON.stringify(fhirStateToStore)); // Update with complete state
+      
+      console.log('Saved user data:', userData); // Debug log
+      console.log('Patient ID for dashboard:', userData.fhir.patientId); // Debug log
+      
+      // Redirect to corresponding dashboard
+      const targetUrl = role === 'practitioner' ? '/clinic-dashboard.html' : '/patient-dashboard.html';
+      window.location.href = targetUrl;
+    }
+
+    // Search users by name - use HAPI FHIR for actual patient data
+    async function searchUsers(searchTerm = '') {
+      if (!fhirClient) {
+        console.error('FHIR client not ready');
+        return;
+      }
+
+      // Show loading
+      userList.innerHTML = '';
+      loadingState.classList.remove('hidden');
+      userListContainer.classList.add('hidden');
+      errorState.classList.add('hidden');
+
+      try {
+        let resources = [];
+        
+        if (selectedRole === 'practitioner') {
+          // Search practitioners from HAPI FHIR
+          let query = 'https://hapi.fhir.org/baseR4/Practitioner?_count=50';
+          
+          if (searchTerm) {
+            const terms = searchTerm.trim().split(/\s+/);
+            if (terms.length === 1) {
+              // Single term: search in family name
+              query += `&name=${encodeURIComponent(terms[0])}`;
+            } else if (terms.length >= 2) {
+              // Multiple terms: first as given, last as family
+              query += `&given=${encodeURIComponent(terms[0])}&family=${encodeURIComponent(terms[terms.length - 1])}`;
+            }
+          }
+          
+          try {
+            const response = await fetch(query);
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const bundle = await response.json();
+            if (bundle && bundle.entry) {
+              resources = bundle.entry.map(e => e.resource).filter(r => r.resourceType === 'Practitioner');
+            }
+          } catch (e) {
+            console.error('Failed to search practitioners from HAPI FHIR:', e);
+          }
+        } else {
+          // Search patients from HAPI FHIR (your kidney transplant patient data)
+          let query = 'https://hapi.fhir.org/baseR4/Patient?_count=50';
+          
+          if (searchTerm) {
+            const terms = searchTerm.trim().split(/\s+/);
+            if (terms.length === 1) {
+              // Single term: search in family name
+              query += `&name=${encodeURIComponent(terms[0])}`;
+            } else if (terms.length >= 2) {
+              // Multiple terms: first as given, last as family
+              query += `&given=${encodeURIComponent(terms[0])}&family=${encodeURIComponent(terms[terms.length - 1])}`;
+            }
+          }
+          
+          // Add condition filter for kidney transplant patients (SNOMED code)
+          // You can customize this code based on your actual condition coding
+          query += '&_has:Condition:subject:code=http://snomed.info/sct|70536003';
+          
+          try {
+            const response = await fetch(query);
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const bundle = await response.json();
+            if (bundle && bundle.entry) {
+              resources = bundle.entry.map(e => e.resource).filter(r => r.resourceType === 'Patient');
+            }
+          } catch (e) {
+            console.error('Failed to search patients from HAPI FHIR:', e);
+            // Try without condition filter as fallback
+            try {
+              let fallbackQuery = 'https://hapi.fhir.org/baseR4/Patient?_count=50';
+              if (searchTerm) {
+                const terms = searchTerm.trim().split(/\s+/);
+                if (terms.length === 1) {
+                  fallbackQuery += `&name=${encodeURIComponent(terms[0])}`;
+                } else if (terms.length >= 2) {
+                  fallbackQuery += `&given=${encodeURIComponent(terms[0])}&family=${encodeURIComponent(terms[terms.length - 1])}`;
+                }
+              }
+              const fallbackResponse = await fetch(fallbackQuery);
+              if (fallbackResponse.ok) {
+                const fallbackBundle = await fallbackResponse.json();
+                if (fallbackBundle && fallbackBundle.entry) {
+                  resources = fallbackBundle.entry.map(e => e.resource).filter(r => r.resourceType === 'Patient');
+                }
+              }
+            } catch (fallbackError) {
+              console.error('Fallback search also failed:', fallbackError);
+            }
+          }
+        }
+        
+        // Display results
+        loadingState.classList.add('hidden');
+        
+        if (resources.length === 0) {
+          userListContainer.classList.remove('hidden');
+          resultCount.textContent = 'No users found';
+          userList.innerHTML = `
+            <div class="col-span-2 text-center py-8 text-gray-500">
+              <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <p class="text-lg font-medium">No users found</p>
+              <p class="text-sm mt-2">Try adjusting your search terms</p>
+            </div>
+          `;
+        } else {
+          userListContainer.classList.remove('hidden');
+          resultCount.textContent = `Found ${resources.length} user${resources.length > 1 ? 's' : ''}`;
+          
+          resources.forEach(resource => {
+            const card = createUserCard(resource, selectedRole);
+            userList.appendChild(card);
+          });
+        }
+        
+      } catch (error) {
+        console.error('Search failed:', error);
+        loadingState.classList.add('hidden');
+        errorState.classList.remove('hidden');
+        errorMessage.textContent = `Search failed: ${error.message}`;
+      }
+    }
+
+    // Load initial user list
+    async function loadUsers() {
+      try {
+        // Wait for FHIR client to be ready
+        fhirClient = await FHIR.oauth2.ready();
+        
+        // Show search container
+        searchContainer.classList.remove('hidden');
+        
+        // Load default users (without search term)
+        await searchUsers('');
+        
+      } catch (error) {
+        console.error('Initialization failed:', error);
+        loadingState.classList.add('hidden');
+        errorState.classList.remove('hidden');
+        errorMessage.textContent = `Initialization failed: ${error.message}`;
+      }
+    }
+
+    // Event listeners
+    searchButton.addEventListener('click', () => {
+      const searchTerm = searchInput.value.trim();
+      searchUsers(searchTerm);
+    });
+
+    searchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const searchTerm = searchInput.value.trim();
+        searchUsers(searchTerm);
+      }
+    });
+
+    clearButton.addEventListener('click', () => {
+      searchInput.value = '';
+      searchUsers('');
+    });
+
+    // Execute when page loads
+    loadUsers();
+  </script>
+
+</body>
+
+</html>
+

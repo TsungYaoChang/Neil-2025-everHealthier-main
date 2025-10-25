@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Health Monitoring System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full space-y-8">
+            <!-- Header -->
+            <div class="text-center">
+                <div class="mx-auto h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center">
+                    <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                    </svg>
+                </div>
+                <h2 class="mt-6 text-3xl font-extrabold text-gray-900">
+                    Create a new account
+                </h2>
+                <p class="mt-2 text-sm text-gray-600">
+                    Join the health monitoring platform and start your wellness journey.
+                </p>
+            </div>
+
+            <!-- Registration form -->
+            <div class="bg-white rounded-lg shadow-md p-8">
+                <form id="registerForm" class="space-y-6">
+                    <!-- Role selection -->
+                    <div class="form-group">
+                        <label class="form-label">Select role</label>
+                        <div class="mt-2 space-y-3">
+                            <div class="relative">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors" for="patient-radio">
+                                    <input type="radio" id="patient-radio" name="role" value="patient" class="form-radio text-blue-600 mr-3" checked>
+                                    <div class="flex items-center">
+                                        <div class="bg-green-100 p-2 rounded-full mr-3">
+                                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <span class="font-medium text-gray-900">Patient</span>
+                                            <p class="text-sm text-gray-500">Personal health tracking and medication management</p>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="relative">
+                                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors" for="clinic-radio">
+                                    <input type="radio" id="clinic-radio" name="role" value="clinic" class="form-radio text-blue-600 mr-3">
+                                    <div class="flex items-center">
+                                        <div class="bg-blue-100 p-2 rounded-full mr-3">
+                                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <span class="font-medium text-gray-900">Clinic</span>
+                                            <p class="text-sm text-gray-500">Patient management and clinical monitoring</p>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Basic information -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="firstName" class="form-label">First name</label>
+                            <input
+                                id="firstName"
+                                name="firstName"
+                                type="text"
+                                class="form-input"
+                                placeholder="Enter your first name"
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="lastName" class="form-label">Last name</label>
+                            <input
+                                id="lastName"
+                                name="lastName"
+                                type="text"
+                                class="form-input"
+                                placeholder="Enter your last name"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Patient-only fields -->
+                    <div id="patientFields" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-group">
+                                <label for="birthDate" class="form-label">Date of birth</label>
+                                <input
+                                    id="birthDate"
+                                    name="birthDate"
+                                    type="date"
+                                    class="form-input"
+                                    required
+                                >
+                            </div>
+                            <div class="form-group">
+                                <label for="gender" class="form-label">Gender</label>
+                                <select id="gender" name="gender" class="form-input" required>
+                                    <option value="">Please select</option>
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="idNumber" class="form-label">National ID number</label>
+                            <input
+                                id="idNumber"
+                                name="idNumber"
+                                type="text"
+                                class="form-input"
+                                placeholder="Enter your national ID"
+                                maxlength="10"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Clinic-only fields -->
+                    <div id="clinicFields" class="space-y-4" style="display: none;">
+                        <div class="form-group">
+                            <label for="clinicName" class="form-label">Clinic name</label>
+                            <input
+                                id="clinicName"
+                                name="clinicName"
+                                type="text"
+                                class="form-input"
+                                placeholder="Enter the clinic name"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="licenseNumber" class="form-label">Facility code</label>
+                            <input
+                                id="licenseNumber"
+                                name="licenseNumber"
+                                type="text"
+                                class="form-input"
+                                placeholder="Enter the facility code"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="doctorName" class="form-label">Supervising physician</label>
+                            <input
+                                id="doctorName"
+                                name="doctorName"
+                                type="text"
+                                class="form-input"
+                                placeholder="Enter the supervising physician name"
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Contact information -->
+                    <div class="space-y-4">
+                        <div class="form-group">
+                            <label for="email" class="form-label">Email</label>
+                            <input
+                                id="email"
+                                name="email"
+                                type="email"
+                                class="form-input"
+                                placeholder="example@email.com"
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="phone" class="form-label">Mobile phone</label>
+                            <input
+                                id="phone"
+                                name="phone"
+                                type="tel"
+                                class="form-input"
+                                placeholder="0912-345-678"
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="address" class="form-label">Mailing address</label>
+                            <textarea
+                                id="address"
+                                name="address"
+                                class="form-input"
+                                rows="3"
+                                placeholder="Enter the complete address"
+                                required
+                            ></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Account settings -->
+                    <div class="space-y-4">
+                        <div class="form-group">
+                            <label for="username" class="form-label">Username</label>
+                            <input
+                                id="username"
+                                name="username"
+                                type="text"
+                                class="form-input"
+                                placeholder="Enter a username (minimum 3 characters)"
+                                required
+                            >
+                            <p class="text-xs text-gray-500 mt-1">Your username is used for login and cannot be changed later.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="password" class="form-label">Password</label>
+                            <div class="relative">
+                                <input
+                                    id="password"
+                                    name="password"
+                                    type="password"
+                                    class="form-input pr-10"
+                                    placeholder="Enter a password (minimum 6 characters)"
+                                    required
+                                >
+                                <button
+                                    type="button"
+                                    id="togglePassword"
+                                    class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                >
+                                    <svg class="h-5 w-5 text-gray-400" id="eyeIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <!-- Password strength indicator -->
+                            <div class="mt-2">
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-gray-500">Password strength</span>
+                                    <span id="passwordStrengthText" class="text-gray-500">Weak</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                                    <div id="passwordStrengthBar" class="bg-red-500 h-2 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmPassword" class="form-label">Confirm password</label>
+                            <input
+                                id="confirmPassword"
+                                name="confirmPassword"
+                                type="password"
+                                class="form-input"
+                                placeholder="Re-enter the password"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Terms agreement -->
+                    <div class="form-group">
+                        <label class="inline-flex items-start">
+                            <input type="checkbox" name="agreeTerms" class="form-checkbox text-blue-600 mt-1" required>
+                            <span class="ml-2 text-sm text-gray-700">
+                                I have read and agree to the
+                                <a href="#" class="text-blue-600 hover:text-blue-500" onclick="Modal.show('termsModal')">Terms of Service</a>
+                                and
+                                <a href="#" class="text-blue-600 hover:text-blue-500" onclick="Modal.show('privacyModal')">Privacy Policy</a>
+                            </span>
+                        </label>
+                    </div>
+
+                    <!-- Subscription option -->
+                    <div class="form-group">
+                        <label class="inline-flex items-center">
+                            <input type="checkbox" name="subscribeNewsletter" class="form-checkbox text-blue-600">
+                            <span class="ml-2 text-sm text-gray-700">
+                                Subscribe to wellness tips and product updates
+                            </span>
+                        </label>
+                    </div>
+
+                    <!-- Submit button -->
+                    <button
+                        type="submit"
+                        id="submitBtn"
+                        class="w-full btn btn-primary py-3 text-base font-medium"
+                    >
+                        <span id="submitText">Create account</span>
+                        <div id="submitLoading" class="loading hidden"></div>
+                    </button>
+                </form>
+
+                <!-- Divider -->
+                <div class="mt-6">
+                    <div class="relative">
+                        <div class="absolute inset-0 flex items-center">
+                            <div class="w-full border-t border-gray-300"></div>
+                        </div>
+                        <div class="relative flex justify-center text-sm">
+                            <span class="px-2 bg-white text-gray-500">Already have an account?</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Login link -->
+                <div class="mt-6 text-center">
+                    <a href="login-smart.html" class="text-blue-600 hover:text-blue-500 font-medium">
+                        Sign in now
+                    </a>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="text-center text-xs text-gray-500">
+                <p>© 2024 Health Monitoring System. All rights reserved.</p>
+                <p class="mt-1">
+                    <a href="#" class="hover:text-gray-700">Privacy Policy</a> |
+                    <a href="#" class="hover:text-gray-700">Terms of Service</a> |
+                    <a href="#" class="hover:text-gray-700">Contact us</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terms of Service modal -->
+    <div id="termsModal" class="modal">
+        <div class="modal-content max-w-2xl">
+            <div class="modal-header">
+                <h3>Terms of Service</h3>
+                <button type="button" class="btn btn-outline" data-modal-close="termsModal">×</button>
+            </div>
+            <div class="modal-body max-h-96 overflow-y-auto">
+                <div class="space-y-4 text-sm text-gray-700">
+                    <h4 class="font-semibold text-gray-900">1. Service scope</h4>
+                    <p>The Health Monitoring System provides health data logging, medication management, and clinical oversight services. Users must comply with relevant medical regulations and platform policies.</p>
+
+                    <h4 class="font-semibold text-gray-900">2. User responsibilities</h4>
+                    <p>Users are responsible for the accuracy of their information and for safeguarding their account credentials. Always consult licensed professionals for medical decisions.</p>
+
+                    <h4 class="font-semibold text-gray-900">3. Privacy protection</h4>
+                    <p>We are committed to protecting user privacy in accordance with applicable data protection laws. Your personal information will not be disclosed or misused without authorization.</p>
+
+                    <h4 class="font-semibold text-gray-900">4. Disclaimer</h4>
+                    <p>This platform is intended for health management support and does not replace professional medical diagnosis or treatment. Seek immediate medical attention for emergencies.</p>
+
+                    <h4 class="font-semibold text-gray-900">5. Service changes</h4>
+                    <p>We may update services or terms from time to time. Significant changes will be communicated to users in advance.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-modal-close="termsModal">I understand</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Policy modal -->
+    <div id="privacyModal" class="modal">
+        <div class="modal-content max-w-2xl">
+            <div class="modal-header">
+                <h3>Privacy Policy</h3>
+                <button type="button" class="btn btn-outline" data-modal-close="privacyModal">×</button>
+            </div>
+            <div class="modal-body max-h-96 overflow-y-auto">
+                <div class="space-y-4 text-sm text-gray-700">
+                    <h4 class="font-semibold text-gray-900">Data collection</h4>
+                    <p>We collect essential personal information to provide monitoring services, including demographics, health metrics, and medication history.</p>
+
+                    <h4 class="font-semibold text-gray-900">Data usage</h4>
+                    <p>Collected information is used solely to deliver services, enhance system features, perform clinical analyses, and satisfy legal obligations.</p>
+
+                    <h4 class="font-semibold text-gray-900">Data protection</h4>
+                    <p>Your information is safeguarded with industry-standard encryption and security practices, with regular reviews and updates.</p>
+
+                    <h4 class="font-semibold text-gray-900">Data sharing</h4>
+                    <p>We do not share personal data with third parties without explicit consent, except when required by law or for urgent care.</p>
+
+                    <h4 class="font-semibold text-gray-900">Your rights</h4>
+                    <p>You may request access, correction, or deletion of your personal data, or ask us to stop processing it. Contact our support team for assistance.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-modal-close="privacyModal">I understand</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="common.js"></script>
+    <script>
+        // JavaScript specific to the registration page
+        class RegisterPage {
+            constructor() {
+                this.form = document.getElementById('registerForm');
+                this.submitBtn = document.getElementById('submitBtn');
+                this.submitText = document.getElementById('submitText');
+                this.submitLoading = document.getElementById('submitLoading');
+                this.togglePassword = document.getElementById('togglePassword');
+                this.passwordInput = document.getElementById('password');
+                this.confirmPasswordInput = document.getElementById('confirmPassword');
+                
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.setupFormValidation();
+                this.setupPasswordStrength();
+                this.checkExistingUser();
+            }
+
+            setupEventListeners() {
+                // Switch role-specific fields
+                document.querySelectorAll('input[name="role"]').forEach(radio => {
+                    radio.addEventListener('change', (e) => {
+                        this.toggleRoleFields(e.target.value);
+                    });
+                });
+
+                // Form submission
+                this.form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleRegister();
+                });
+
+                // Toggle password visibility
+                this.togglePassword.addEventListener('click', () => {
+                    this.togglePasswordVisibility();
+                });
+
+                // Password strength check
+                this.passwordInput.addEventListener('input', () => {
+                    this.checkPasswordStrength();
+                });
+
+                // Confirm password check
+                this.confirmPasswordInput.addEventListener('input', () => {
+                    this.checkPasswordMatch();
+                });
+
+                // National ID formatting
+                document.getElementById('idNumber').addEventListener('input', (e) => {
+                    e.target.value = e.target.value.toUpperCase();
+                });
+
+                // Phone number formatting
+                document.getElementById('phone').addEventListener('input', (e) => {
+                    let value = e.target.value.replace(/\D/g, '');
+                    if (value.length >= 4) {
+                        value = value.replace(/(\d{4})(\d{3})(\d{3})/, '$1-$2-$3');
+                    }
+                    e.target.value = value;
+                });
+            }
+
+            toggleRoleFields(role) {
+                const patientFields = document.getElementById('patientFields');
+                const clinicFields = document.getElementById('clinicFields');
+
+                if (role === 'patient') {
+                    patientFields.style.display = 'block';
+                    clinicFields.style.display = 'none';
+                    
+                    // Set required fields
+                    this.setFieldsRequired(patientFields, true);
+                    this.setFieldsRequired(clinicFields, false);
+                } else {
+                    patientFields.style.display = 'none';
+                    clinicFields.style.display = 'block';
+                    
+                    // Set required fields
+                    this.setFieldsRequired(patientFields, false);
+                    this.setFieldsRequired(clinicFields, true);
+                }
+            }
+
+            setFieldsRequired(container, required) {
+                const inputs = container.querySelectorAll('input, select');
+                inputs.forEach(input => {
+                    if (required) {
+                        input.setAttribute('required', '');
+                    } else {
+                        input.removeAttribute('required');
+                    }
+                });
+            }
+
+            setupFormValidation() {
+                const inputs = this.form.querySelectorAll('input[required], select[required]');
+                inputs.forEach(input => {
+                    input.addEventListener('blur', () => {
+                        this.validateField(input);
+                    });
+
+                    input.addEventListener('input', () => {
+                        if (input.classList.contains('error')) {
+                            this.validateField(input);
+                        }
+                    });
+                });
+            }
+
+            validateField(input) {
+                const value = input.value.trim();
+                let isValid = true;
+                let errorMessage = '';
+
+                // Clear previous errors
+                input.classList.remove('error');
+                const existingError = input.parentNode.querySelector('.form-error');
+                if (existingError) {
+                    existingError.remove();
+                }
+
+                // Required validation
+                if (input.hasAttribute('required') && !value) {
+                    isValid = false;
+                    errorMessage = 'This field is required';
+                }
+
+                // Field-specific validation
+                if (value) {
+                    switch (input.name) {
+                        case 'email':
+                            if (!Utils.validateInput(value, 'email')) {
+                                isValid = false;
+                                errorMessage = 'Please enter a valid email address';
+                            }
+                            break;
+                        case 'phone':
+                            const phoneRegex = /^09\d{2}-\d{3}-\d{3}$/;
+                            if (!phoneRegex.test(value)) {
+                                isValid = false;
+                                errorMessage = 'Enter a valid phone number (09XX-XXX-XXX)';
+                            }
+                            break;
+                        case 'idNumber':
+                            if (!this.validateIdNumber(value)) {
+                                isValid = false;
+                                errorMessage = 'Enter a valid national ID number';
+                            }
+                            break;
+                        case 'username':
+                            if (value.length < 3) {
+                                isValid = false;
+                                errorMessage = 'Username must be at least 3 characters';
+                            } else if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+                                isValid = false;
+                                errorMessage = 'Username can contain letters, numbers, and underscores only';
+                            }
+                            break;
+                        case 'password':
+                            if (value.length < 6) {
+                                isValid = false;
+                                errorMessage = 'Password must be at least 6 characters';
+                            }
+                            break;
+                        case 'confirmPassword':
+                            if (value !== this.passwordInput.value) {
+                                isValid = false;
+                                errorMessage = 'Passwords do not match';
+                            }
+                            break;
+                    }
+                }
+
+                if (!isValid) {
+                    input.classList.add('error');
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'form-error';
+                    errorDiv.textContent = errorMessage;
+                    input.parentNode.appendChild(errorDiv);
+                }
+
+                return isValid;
+            }
+
+            validateIdNumber(id) {
+                // Taiwan national ID validation
+                if (!/^[A-Z][12]\d{8}$/.test(id)) return false;
+                
+                const letterValues = {
+                    A: 10, B: 11, C: 12, D: 13, E: 14, F: 15, G: 16, H: 17, I: 34, J: 18,
+                    K: 19, L: 20, M: 21, N: 22, O: 35, P: 23, Q: 24, R: 25, S: 26, T: 27,
+                    U: 28, V: 29, W: 32, X: 30, Y: 31, Z: 33
+                };
+                
+                const firstLetter = letterValues[id[0]];
+                const weights = [1, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1];
+                
+                let sum = Math.floor(firstLetter / 10) + (firstLetter % 10) * 9;
+                for (let i = 1; i < 10; i++) {
+                    sum += parseInt(id[i]) * weights[i];
+                }
+                
+                return sum % 10 === 0;
+            }
+
+            setupPasswordStrength() {
+                this.passwordInput.addEventListener('input', () => {
+                    this.checkPasswordStrength();
+                });
+            }
+
+            checkPasswordStrength() {
+                const password = this.passwordInput.value;
+                const strengthBar = document.getElementById('passwordStrengthBar');
+                const strengthText = document.getElementById('passwordStrengthText');
+                
+                let strength = 0;
+                let strengthLabel = 'Weak';
+                let strengthColor = 'bg-red-500';
+                
+                // Length checks
+                if (password.length >= 6) strength += 1;
+                if (password.length >= 8) strength += 1;
+                
+                // Complexity checks
+                if (/[a-z]/.test(password)) strength += 1;
+                if (/[A-Z]/.test(password)) strength += 1;
+                if (/[0-9]/.test(password)) strength += 1;
+                if (/[^a-zA-Z0-9]/.test(password)) strength += 1;
+                
+                // Calculate strength
+                const percentage = (strength / 6) * 100;
+                
+                if (strength >= 5) {
+                    strengthLabel = 'Strong';
+                    strengthColor = 'bg-green-500';
+                } else if (strength >= 3) {
+                    strengthLabel = 'Moderate';
+                    strengthColor = 'bg-yellow-500';
+                }
+                
+                strengthBar.className = `h-2 rounded-full transition-all ${strengthColor}`;
+                strengthBar.style.width = `${percentage}%`;
+                strengthText.textContent = strengthLabel;
+            }
+
+            checkPasswordMatch() {
+                const confirmPassword = this.confirmPasswordInput.value;
+                const password = this.passwordInput.value;
+                
+                // Clear previous errors
+                this.confirmPasswordInput.classList.remove('error');
+                const existingError = this.confirmPasswordInput.parentNode.querySelector('.form-error');
+                if (existingError) {
+                    existingError.remove();
+                }
+                
+                if (confirmPassword && confirmPassword !== password) {
+                    this.confirmPasswordInput.classList.add('error');
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'form-error';
+                    errorDiv.textContent = 'Passwords do not match';
+                    this.confirmPasswordInput.parentNode.appendChild(errorDiv);
+                }
+            }
+
+            togglePasswordVisibility() {
+                const type = this.passwordInput.type === 'password' ? 'text' : 'password';
+                this.passwordInput.type = type;
+                
+                const eyeIcon = document.getElementById('eyeIcon');
+                if (type === 'text') {
+                    eyeIcon.innerHTML = `
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"></path>
+                    `;
+                } else {
+                    eyeIcon.innerHTML = `
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    `;
+                }
+            }
+
+            async handleRegister() {
+                // End-to-end form validation
+                const formData = new FormData(this.form);
+                const data = Object.fromEntries(formData);
+
+                // Validate required fields
+                let isValid = true;
+                const requiredFields = this.form.querySelectorAll('input[required], select[required]');
+                
+                requiredFields.forEach(field => {
+                    if (!this.validateField(field)) {
+                        isValid = false;
+                    }
+                });
+
+                // Confirm terms acceptance
+                if (!data.agreeTerms) {
+                    Utils.showNotification('Please read and agree to the Terms of Service and Privacy Policy', 'warning');
+                    isValid = false;
+                }
+
+                // Check password confirmation
+                if (data.password !== data.confirmPassword) {
+                    Utils.showNotification('Password confirmation does not match', 'warning');
+                    isValid = false;
+                }
+
+                if (!isValid) {
+                    return;
+                }
+
+                // Set loading state
+                this.setLoading(true);
+
+                try {
+                    // Simulate registration API call
+                    const response = await this.mockRegister(data);
+                    
+                    if (response.success) {
+                        Utils.showNotification('Registration successful! Check your email to verify your account.', 'success');
+
+                        // Show success message and redirect
+                        setTimeout(() => {
+                            window.location.href = 'login-smart.html';
+                        }, 2000);
+                    } else {
+                        Utils.showNotification(response.message || 'Registration failed', 'danger');
+                    }
+                } catch (error) {
+                    console.error('Registration error:', error);
+                    Utils.showNotification('Network error, please try again later', 'danger');
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+
+            async mockRegister(userData) {
+                // Simulate API latency
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Mock username duplication check
+                const existingUsers = ['admin', 'test', 'user123'];
+                if (existingUsers.includes(userData.username)) {
+                    return {
+                        success: false,
+                        message: 'Username already exists. Please choose another one.'
+                    };
+                }
+
+                // Mock email duplication check
+                const existingEmails = ['test@example.com', 'admin@example.com'];
+                if (existingEmails.includes(userData.email)) {
+                    return {
+                        success: false,
+                        message: 'This email address is already registered'
+                    };
+                }
+
+                // Simulate successful registration
+                return {
+                    success: true,
+                    message: 'Registration successful',
+                    userId: 'U' + Date.now(),
+                    verificationRequired: true
+                };
+            }
+
+            setLoading(loading) {
+                if (loading) {
+                    this.submitBtn.disabled = true;
+                    this.submitText.textContent = 'Creating account...';
+                    this.submitLoading.classList.remove('hidden');
+                } else {
+                    this.submitBtn.disabled = false;
+                    this.submitText.textContent = 'Create account';
+                    this.submitLoading.classList.add('hidden');
+                }
+            }
+
+            checkExistingUser() {
+                // Redirect already authenticated users
+                if (Auth.isAuthenticated()) {
+                    const role = Auth.getUserRole();
+                    if (role === 'patient') {
+                        window.location.href = 'patient-dashboard.html';
+                    } else {
+                        window.location.href = 'clinic-dashboard.html';
+                    }
+                }
+            }
+        }
+
+        // Initialize when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new RegisterPage();
+        });
+    </script>
+</body>
+</html>

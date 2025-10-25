@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ever healthier - Kidney Transplant Monitoring Platform</title>
+  <script src="config.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .card-hover {
+      transition: all 0.3s ease;
+    }
+
+    .card-hover:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    }
+
+    .feature-icon {
+      transition: transform 0.3s ease;
+    }
+
+    .card-hover:hover .feature-icon {
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <!-- Logo Icon -->
+          <div class="w-10 h-10 rounded-lg gradient-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z">
+              </path>
+            </svg>
+          </div>
+          <!-- Brand Name -->
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Ever Healthier</h1>
+            <p class="text-xs text-gray-500">Kidney Transplant Care Platform</p>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+
+    <!-- Hero Section -->
+    <div class="text-center mb-12">
+      <h2 class="text-4xl font-bold text-gray-900 mb-4">
+        Welcome to Ever Healthier
+      </h2>
+      <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+        A digital platform designed for post-kidney transplant medication adherence and monitoring,
+        empowering patients and clinicians with real-time health tracking and seamless communication.
+      </p>
+    </div>
+
+    <!-- Portal Selection Cards -->
+    <div class="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto mb-16">
+
+      <!-- Patient Portal Card -->
+      <div class="bg-white rounded-2xl shadow-lg overflow-hidden card-hover cursor-pointer"
+        onclick="redirectToPatientPortal()">
+        <div class="p-8">
+          <!-- Icon -->
+          <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-6 feature-icon">
+            <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+            </svg>
+          </div>
+
+          <!-- Title -->
+          <h3 class="text-2xl font-bold text-gray-900 mb-3">Patient Portal</h3>
+          <p class="text-gray-600 mb-6">
+            Access your personal health dashboard to track medications, record vital signs, and manage your
+            post-transplant care journey.
+          </p>
+
+          <!-- Features List -->
+          <ul class="space-y-3 mb-6">
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-sm text-gray-700">Medication logging with dose & time tracking</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-sm text-gray-700">Vital signs monitoring (BP, weight, temperature, fluids)</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-sm text-gray-700">Daily log summary & calendar view</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-sm text-gray-700">View patient profile & medical conditions from FHIR</span>
+            </li>
+          </ul>
+
+          <!-- CTA Button -->
+          <button
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200">
+            Continue as Patient
+          </button>
+        </div>
+      </div>
+
+      <!-- Clinic Portal Card -->
+      <div class="bg-white rounded-2xl shadow-lg overflow-hidden card-hover cursor-pointer"
+        onclick="redirectToClinicPortal()">
+        <div class="p-8">
+          <!-- Icon -->
+          <div class="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-6 feature-icon">
+            <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4">
+              </path>
+            </svg>
+          </div>
+
+          <!-- Title -->
+          <h3 class="text-2xl font-bold text-gray-900 mb-3">Clinic Portal</h3>
+          <p class="text-gray-600 mb-6">
+            Monitor your kidney transplant patients, review clinical data with interactive charts, and access
+            comprehensive patient summaries.
+          </p>
+
+          <!-- Features List -->
+          <ul class="space-y-3 mb-6">
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-sm text-gray-700">Multi-patient dashboard with risk indicators</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-sm text-gray-700">Renal trends & immunosuppressant level monitoring</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-sm text-gray-700">Clinical alerts for out-of-range values</span>
+            </li>
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-sm text-gray-700">Blood pressure & weight trend charts</span>
+            </li>
+          </ul>
+
+          <!-- CTA Button -->
+          <button
+            class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200">
+            Continue as Clinician
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- About Section -->
+    <div class="bg-white rounded-2xl shadow-lg p-8 max-w-5xl mx-auto mb-12">
+      <h3 class="text-2xl font-bold text-gray-900 mb-4 text-center">About Ever Healthier</h3>
+      <div class="prose prose-lg max-w-none text-gray-600">
+        <p class="mb-4">
+          <strong>Ever Healthier</strong> is a SMART on FHIR-based digital platform specifically designed for kidney
+          transplant recipients and their clinical care teams.
+        </p>
+        <p class="mb-4">
+          Following kidney transplantation, patients require lifelong immunosuppressive therapy to prevent organ
+          rejection. Even minor deviations from prescribed medication regimens can have severe consequences, including
+          hospitalization, transplant rejection, and increased mortality rates.
+        </p>
+        <p>
+          Our platform enhances medication adherence, safety, and communication between patients and clinicians by
+          providing real-time health tracking, comprehensive monitoring tools, and data-driven insights to support
+          better post-transplant outcomes.
+        </p>
+      </div>
+    </div>
+
+    <!-- Features Grid -->
+    <div class="max-w-5xl mx-auto mb-12">
+      <h3 class="text-2xl font-bold text-gray-900 mb-8 text-center">Platform Features</h3>
+      <div class="grid md:grid-cols-3 gap-6">
+
+        <div class="bg-white rounded-xl shadow p-6 text-center">
+          <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+              </path>
+            </svg>
+          </div>
+          <h4 class="font-semibold text-gray-900 mb-2">Health Tracking</h4>
+          <p class="text-sm text-gray-600">Log vital signs, medications, and symptoms with daily calendar view</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow p-6 text-center">
+          <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+              </path>
+            </svg>
+          </div>
+          <h4 class="font-semibold text-gray-900 mb-2">Clinical Analytics</h4>
+          <p class="text-sm text-gray-600">Interactive charts for renal function, immunosuppressants, and trends</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow p-6 text-center">
+          <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z">
+              </path>
+            </svg>
+          </div>
+          <h4 class="font-semibold text-gray-900 mb-2">FHIR Integration</h4>
+          <p class="text-sm text-gray-600">Seamless access to patient profiles and clinical data via SMART on FHIR</p>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-gray-200 mt-16">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="flex flex-col md:flex-row justify-between items-center">
+        <div class="text-center md:text-left mb-4 md:mb-0">
+          <p class="text-sm text-gray-600">
+            © 2025 Team Ever Healthier. All rights reserved.
+          </p>
+          <p class="text-xs text-gray-500 mt-1">
+            SMART on FHIR-based Digital Health Platform
+          </p>
+        </div>
+        <div class="flex space-x-6">
+          <a href="#privacy" class="text-sm text-gray-600 hover:text-indigo-600">Privacy Policy</a>
+          <a href="#terms" class="text-sm text-gray-600 hover:text-indigo-600">Terms of Service</a>
+          <a href="#contact" class="text-sm text-gray-600 hover:text-indigo-600">Contact Support</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import FHIR from "https://cdn.skypack.dev/fhirclient@2.6.3";
+
+    const BACKEND_URL = window.APP_CONFIG?.BACKEND_URL || 'http://localhost:3001';
+    const defaultStandaloneIss = window.APP_CONFIG?.FHIR_AUTH_SERVER || "https://r4.smarthealthit.org";
+    const clientId = window.APP_CONFIG?.CLIENT_ID || "my-smart-web-app";
+    
+    // patient portal
+    window.redirectToPatientPortal = function() {
+      // save role as patient
+      localStorage.setItem('selected_role', 'patient');
+      
+      const scope = window.APP_CONFIG?.PATIENT_SCOPE || "launch/patient openid fhirUser profile patient/Patient.read patient/Observation.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Condition.read patient/QuestionnaireResponse.read";
+    
+      console.log('Initiating OAuth2 authorization for patient...');
+      console.log('Backend URL:', BACKEND_URL);
+      
+      // start OAuth2 authorization flow
+      // Note: may see 404 error trying to get .well-known/smart-configuration
+      // this is normal, FHIR client will use fallback configuration
+      FHIR.oauth2.authorize({
+        clientId: clientId,
+        redirectUri: `${BACKEND_URL}/callback.html`,
+        scope: scope,
+        iss: defaultStandaloneIss,
+        aud: defaultStandaloneIss,
+        // provide complete endpoints to reduce automatic discovery requests
+        authorizeUri: `${defaultStandaloneIss}/auth/authorize`,
+        tokenUri: `${defaultStandaloneIss}/auth/token`
+      }).catch(err => {
+        console.error('Authorization failed:', err);
+        alert('Authorization failed. Please try again. Error: ' + err.message);
+      });
+    };
+
+    // clinic portal
+    window.redirectToClinicPortal = function() {
+      // save role as practitioner
+      localStorage.setItem('selected_role', 'practitioner');
+      
+      // practitioner scope
+      const scope = window.APP_CONFIG?.PRACTITIONER_SCOPE || "openid fhirUser profile user/Patient.read user/Practitioner.read user/Observation.read user/MedicationRequest.read user/MedicationStatement.read user/Condition.read user/QuestionnaireResponse.read";
+    
+      console.log('Initiating OAuth2 authorization for practitioner...');
+      console.log('Backend URL:', BACKEND_URL);
+      
+      // start OAuth2 authorization flow
+      FHIR.oauth2.authorize({
+        clientId: clientId,
+        redirectUri: `${BACKEND_URL}/callback.html`,
+        scope: scope,
+        iss: defaultStandaloneIss,
+        aud: defaultStandaloneIss,
+        // provide complete endpoints to reduce automatic discovery requests
+        authorizeUri: `${defaultStandaloneIss}/auth/authorize`,
+        tokenUri: `${defaultStandaloneIss}/auth/token`
+      }).catch(err => {
+        console.error('Authorization failed:', err);
+        alert('Authorization failed. Please try again. Error: ' + err.message);
+      });
+    };
+  </script>
+
+</body>
+
+</html>

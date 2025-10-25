@@ -1,0 +1,16 @@
+# Render.com configuration file
+services:
+  - type: web
+    name: everhealthier-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node fhir-proxy.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    healthCheckPath: /callback.html
+

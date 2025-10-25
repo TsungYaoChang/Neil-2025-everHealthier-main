@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clinic Dashboard - EverHealthier</title>
+  <script src="config.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  
+  <!-- Load Chart.js FIRST before any other scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // CRITICAL: Save Chart.js immediately to prevent common.js from overwriting it
+    if (typeof Chart !== 'undefined') {
+      window.ChartJSLib = Chart;
+      console.log('✅ Chart.js saved to window.ChartJSLib');
+    } else {
+      console.error('❌ Chart.js failed to load!');
+    }
+  </script>
+  
+  <!-- Top Navigation Bar -->
+  <nav class="bg-white border-b sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        <div class="flex items-center">
+          <h1 class="text-xl font-bold text-blue-600">EverHealthier</h1>
+          <span class="ml-3 text-sm text-gray-500">Clinic Dashboard</span>
+        </div>
+        
+        <div class="flex items-center space-x-4">
+          <div class="text-right">
+            <p class="text-sm font-medium text-gray-700" id="userName">User Name</p>
+            <p class="text-xs text-gray-500" id="currentDate">Loading...</p>
+          </div>
+          <div class="relative">
+            <button id="userMenuButton" class="flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 text-white font-semibold hover:bg-blue-700">
+              <span id="userInitial"> </span>
+            </button>
+            <div id="userMenu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border py-1">
+              <a href="#" id="logoutBtn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      
+      <!-- LEFT COLUMN -->
+      <div class="space-y-6">
+
+        <!-- Search Bar -->
+        <div class="bg-white rounded-xl border relative">
+            <input type="text" id="patientSearch" placeholder="Search patients by name or ID..." 
+              class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <div class="absolute left-3 top-2.5">
+              <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+          </div>
+        </div>
+        
+        <!-- Next Appointments -->
+        <div class="bg-white rounded-xl border">
+          <div class="px-5 py-4 flex items-center justify-between">
+            <h2 class="text-lg font-semibold">Next Appointments</h2>
+            <button id="viewAllAppointments" class="text-sm text-blue-600 hover:text-blue-800">View All</button>
+          </div>
+          <div id="nextApptList" class="px-5 pb-5 space-y-3">
+            <!-- Loading state -->
+            <div class="flex flex-col items-center justify-center py-8 space-y-3">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p class="text-gray-600">Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Patients Requiring Attention -->
+        <div class="bg-white rounded-xl border">
+          <div class="px-5 py-4">
+            <h2 class="text-lg font-semibold mb-4">Patients Requiring Attention</h2>
+            
+            <!-- Category Tabs -->
+            <div class="flex space-x-1 border-b">
+              <button data-category="total" class="attention-tab px-4 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+                Total (<span id="totalCount">_</span>)
+              </button>
+              <button data-category="high" class="attention-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-blue-600">
+                High Risk (<span id="highRiskCount">_</span>)
+              </button>
+              <button data-category="medium" class="attention-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-blue-600">
+                Medium Risk (<span id="mediumRiskCount">_</span>)
+              </button>
+              <button data-category="normal" class="attention-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-blue-600">
+                Normal (<span id="normalCount">_</span>)
+              </button>
+            </div>
+          </div>
+          
+          <!-- Patient List -->
+          <div class="px-5 pb-5">
+            <div class="flex items-center pb-3 border-b font-medium text-sm text-gray-700">
+              <div class="w-56 pl-14">Patient</div>
+              <div class="w-28 flex justify-center">Risk</div>
+              <div class="flex-1 flex justify-start pl-4">Adherence</div>
+              <div class="w-24"></div>
+            </div>
+            <div id="patientListItems" class="space-y-3 mt-3"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: Patient Overview -->
+      <div>
+        <div id="selectedPatientCard" class="bg-white rounded-xl border hidden">
+          <div class="px-5 py-4 flex items-center justify-between border-b">
+            <h2 class="text-lg font-semibold flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              Patient Overview
+            </h2>
+            <button id="closePatientCard" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="px-5 py-5 space-y-5">
+            <!-- Demographics -->
+            <div class="grid grid-cols-2 md:grid-cols-12 gap-3">
+              <div class="col-span-3">
+                <p class="text-sm text-gray-500">Name</p>
+                <p id="pdName" class="font-medium">-</p>
+              </div>
+              <!-- <div>
+                <p class="text-xs text-gray-500">Patient ID</p>
+                <p id="pdId" class="font-medium">-</p>
+              </div> -->
+              <div class="col-span-2">
+                <p class="text-sm text-gray-500">Risk Level</p>
+                <span id="pdRisk" class="inline-flex items-center px-2 py-0.5 rounded text-xs">-</span>
+              </div>
+              <div class="col-span-4">
+                <p class="text-sm text-gray-500">Adherence</p>
+                <div class="flex items-center space-x-3">
+                  <div class="text-center">
+                    <svg id="pdAdherenceYesterday" class="w-12 h-12" viewBox="0 0 48 48">
+                      <circle cx="24" cy="24" r="20" fill="none" stroke="#e5e7eb" stroke-width="4"></circle>
+                      <circle cx="24" cy="24" r="20" fill="none" stroke="#dc2626" stroke-width="4" 
+                              stroke-dasharray="125.6" stroke-dashoffset="125.6" 
+                              transform="rotate(-90 24 24)" stroke-linecap="round"></circle>
+                      <text class="text-xs font-medium" x="24" y="28" text-anchor="middle" fill="#333">_%</text>
+                    </svg>
+                    <p class="text-xs text-gray-600 mt-1">Yesterday</p>
+                  </div>
+                  <div class="text-center">
+                    <svg id="pdAdherence7Days" class="w-12 h-12" viewBox="0 0 48 48">
+                      <circle cx="24" cy="24" r="20" fill="none" stroke="#e5e7eb" stroke-width="4"></circle>
+                      <circle cx="24" cy="24" r="20" fill="none" stroke="#dc2626" stroke-width="4" 
+                              stroke-dasharray="125.6" stroke-dashoffset="125.6" 
+                              transform="rotate(-90 24 24)" stroke-linecap="round"></circle>
+                      <text class="text-xs font-medium" x="24" y="28" text-anchor="middle" fill="#333">_%</text>
+                    </svg>
+                    <p class="text-xs text-gray-600 mt-1">7 Days</p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-span-3">
+                <p class="flex-1 text-sm text-gray-500">Next Visit</p>
+                <p class="text-xs" id="pdNextVisit">-</p>
+              </div>
+            </div>
+
+            <!-- Quick Vitals -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <p class="text-xs text-gray-500 mb-1">Latest Blood Pressure</p>
+                <p id="pdBloodPressure" class="font-semibold">-</p>
+              </div>
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <p class="text-xs text-gray-500 mb-1">Latest Weight</p>
+                <p id="pdWeight" class="font-semibold">-</p>
+              </div>
+              <div class="p-4 bg-gray-50 rounded-lg">
+                <p class="text-xs text-gray-500 mb-1">Latest Temperature</p>
+                <p id="pdTemperature" class="font-semibold">-</p>
+              </div>
+            </div>
+
+            <!-- 5 Clinical Tabs -->
+            <div>
+              <div class="flex border-b text-sm overflow-x-auto overflow-y-hidden" role="tablist">
+                <button data-tab="summary" class="clinical-tab px-4 py-2 border-b-2 -mb-px border-blue-600 text-blue-600 whitespace-nowrap">Summary</button>
+                <button data-tab="renalTrends" class="clinical-tab px-4 py-2 text-gray-600 hover:text-blue-600 whitespace-nowrap">Renal Trends</button>
+                <button data-tab="medications" class="clinical-tab px-4 py-2 text-gray-600 hover:text-blue-600 whitespace-nowrap">Medications & Levels</button>
+                <button data-tab="clinicalEvents" class="clinical-tab px-4 py-2 text-gray-600 hover:text-blue-600 whitespace-nowrap">Clinical Events</button>
+                <button data-tab="selfReports" class="clinical-tab px-4 py-2 text-gray-600 hover:text-blue-600 whitespace-nowrap">Patient Self-reports</button>
+              </div>
+              
+              <div class="pt-4">
+                <!-- Tab 1: Summary / Snapshot -->
+                <div id="tab-summary" class="clinical-tab-content">
+                  <div class="space-y-6">
+                    
+                    <!-- eGFR/Cr Trend -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 class="font-semibold text-sm mb-2 flex items-center">
+                        <span class="text-blue-700">Recent Renal Function Trend</span>
+                        <span class="ml-2 text-xs text-blue-600">(eGFR / Creatinine)</span>
+                      </h4>
+                      <div class="h-32">
+                        <canvas id="summaryRenalChart"></canvas>
+                      </div>
+                    </div>
+
+                    <!-- Immunosuppressant Level Range -->
+                    <div class="border rounded-lg p-4">
+                      <h4 class="font-semibold text-sm mb-3">Immunosuppressant Concentration Range</h4>
+                      <div id="summaryImmunoRange"></div>
+                    </div>
+
+                    <!-- High Risk Alerts -->
+                    <div id="summaryAlerts" class="space-y-2"></div>
+
+                    <!-- Medication Adherence Progress -->
+                    <!-- <div class="border rounded-lg p-4">
+                      <h4 class="font-semibold text-sm mb-2">Medication Adherence Progress</h4>
+                      <div class="flex items-center space-x-3">
+                        <div class="flex-1 bg-gray-200 rounded-full h-3">
+                          <div id="summaryAdherenceBar" class="bg-blue-600 h-3 rounded-full transition-all" style="width: 0%"></div>
+                        </div>
+                        <span id="summaryAdherenceText" class="text-sm font-medium">0%</span>
+                      </div>
+                    </div> -->
+
+                  </div>
+                </div>
+
+                <!-- Tab 2: Renal Trends -->
+                <div id="tab-renalTrends" class="clinical-tab-content hidden">
+                  <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                      <h4 class="font-semibold text-sm">3-Month Renal Function Changes</h4>
+                      <div class="flex space-x-2">
+                        <button data-view="blood" class="renal-view-btn px-3 py-1 text-xs rounded bg-blue-600 text-white">Blood Tests</button>
+                        <button data-view="urine" class="renal-view-btn px-3 py-1 text-xs rounded bg-gray-200 text-gray-700">Urine Tests</button>
+                      </div>
+                    </div>
+                    <div class="h-64 border rounded-lg p-4">
+                      <canvas id="renalTrendsChart"></canvas>
+                    </div>
+                    
+                    <!-- CRP/WBC Activity -->
+                    <div class="border-t pt-4">
+                      <h4 class="font-semibold text-sm mb-2">Disease Activity (CRP / WBC)</h4>
+                      <div class="h-48 border rounded-lg p-4">
+                        <canvas id="activityChart"></canvas>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Tab 3: Medications & Levels -->
+                <div id="tab-medications" class="clinical-tab-content hidden">
+                  <div class="space-y-4">
+                    <div>
+                      <h4 class="font-semibold text-sm mb-3">Tacrolimus Trough Levels (Last 5)</h4>
+                      <div class="h-64 border rounded-lg p-4">
+                        <canvas id="immunoLevelsChart"></canvas>
+                      </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div class="border rounded-lg p-4">
+                        <h4 class="font-semibold text-sm mb-2">MMF Dosage</h4>
+                        <div id="mmfDosage" class="text-sm"></div>
+                      </div>
+                      <div class="border rounded-lg p-4">
+                        <h4 class="font-semibold text-sm mb-2">Prednisolone Dosage</h4>
+                        <div id="predDosage" class="text-sm"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Tab 4: Clinical Events -->
+                <div id="tab-clinicalEvents" class="clinical-tab-content hidden">
+                  <div class="space-y-4">
+                    <div class="relative">
+                      <div id="clinicalTimeline" class="space-y-4"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Tab 5: Patient Self-reports -->
+                <div id="tab-selfReports" class="clinical-tab-content hidden">
+                  <div class="space-y-4">
+                    <div>
+                      <h4 class="font-semibold text-sm mb-3">Home Blood Pressure Trend</h4>
+                      <div class="h-48 border rounded-lg p-4">
+                        <canvas id="bpTrendChart"></canvas>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h4 class="font-semibold text-sm mb-3">Weight Curve (Fluid Status)</h4>
+                      <div class="h-48 border rounded-lg p-4">
+                        <canvas id="weightCurveChart"></canvas>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h4 class="font-semibold text-sm mb-2">Symptom Reports</h4>
+                      <div id="symptomsList" class="space-y-2"></div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- IMPORTANT: Load Chart.js BEFORE common.js to prevent conflicts -->
+  <script>
+    // Save Chart.js constructor before common.js loads
+    window.ChartJSConstructor = Chart;
+    console.log('Chart.js pre-loaded:', typeof Chart);
+  </script>
+  
+  <!-- Load common utilities -->
+  <script src="common.js"></script>
+  <script src="clinic.js"></script>
+
+</body>
+</html>
