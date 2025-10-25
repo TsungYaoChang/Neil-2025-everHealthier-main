@@ -24,7 +24,10 @@ const CONFIG = {
   
   // Scopes
   PATIENT_SCOPE: 'launch/patient openid fhirUser profile patient/Patient.read patient/Observation.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Condition.read patient/QuestionnaireResponse.read',
-  PRACTITIONER_SCOPE: 'openid fhirUser profile user/Patient.read user/Practitioner.read user/Observation.read user/MedicationRequest.read user/MedicationStatement.read user/Condition.read user/QuestionnaireResponse.read'
+  PRACTITIONER_SCOPE: 'openid fhirUser profile user/Patient.read user/Practitioner.read user/Observation.read user/MedicationRequest.read user/MedicationStatement.read user/Condition.read user/QuestionnaireResponse.read',
+  
+  // Additional settings
+  ENABLE_NOTIFICATIONS: false
 };
 
 // Make config globally available

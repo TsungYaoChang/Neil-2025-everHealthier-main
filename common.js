@@ -1,14 +1,7 @@
 // 共用 JavaScript 文件 - common.js
 
-// 全域變數和設定
-const CONFIG = {
-  API_BASE_URL: 'http://localhost:3000/api',
-  FHIR_BASE_URL: 'http://localhost:8080/fhir',
-  TOKEN_KEY: 'auth_token',
-  USER_KEY: 'user_data',
-  ROLE_KEY: 'user_role',
-  ENABLE_NOTIFICATIONS: false // set true when backend /notifications/unread is available
-};
+// 使用 config.js 中已定義的 CONFIG，避免重複宣告
+// CONFIG 現在由 config.js 提供
 
 // 工具函式
 const Utils = {
@@ -134,7 +127,7 @@ const Utils = {
 // API 請求處理
 const API = {
   async request(url, options = {}) {
-    const token = Utils.storage.get(CONFIG.TOKEN_KEY);
+    const token = Utils.storage.get('auth_token');
     const defaultOptions = {
       headers: {
         'Content-Type': 'application/json',
@@ -143,7 +136,7 @@ const API = {
     };
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}${url}`, {
+      const response = await fetch(`${window.APP_CONFIG?.BACKEND_URL || 'http://localhost:3001'}${url}`, {
         ...defaultOptions,
         ...options,
         headers: { ...defaultOptions.headers, ...(options.headers || {}) }
@@ -175,9 +168,9 @@ const Auth = {
     try {
       const response = await API.post('/auth/login', credentials);
       if (response.token) {
-        Utils.storage.set(CONFIG.TOKEN_KEY, response.token);
-        Utils.storage.set(CONFIG.USER_KEY, response.user);
-        Utils.storage.set(CONFIG.ROLE_KEY, response.user.role);
+        Utils.storage.set('auth_token', response.token);
+        Utils.storage.set('user_data', response.user);
+        Utils.storage.set('user_role', response.user.role);
         return response;
       }
     } catch {
@@ -185,13 +178,13 @@ const Auth = {
     }
   },
   logout() {
-    Utils.storage.remove(CONFIG.TOKEN_KEY);
-    Utils.storage.remove(CONFIG.USER_KEY);
-    Utils.storage.remove(CONFIG.ROLE_KEY);
+    Utils.storage.remove('auth_token');
+    Utils.storage.remove('user_data');
+    Utils.storage.remove('user_role');
   },
-  isAuthenticated() { return !!Utils.storage.get(CONFIG.TOKEN_KEY); },
-  getCurrentUser() { return Utils.storage.get(CONFIG.USER_KEY); },
-  getUserRole() { return Utils.storage.get(CONFIG.ROLE_KEY); }
+  isAuthenticated() { return !!Utils.storage.get('auth_token'); },
+  getCurrentUser() { return Utils.storage.get('user_data'); },
+  getUserRole() { return Utils.storage.get('user_role'); }
 };
 
 // 模態框管理（統一 IIFE，支援舊/新兩種結構）
@@ -652,8 +645,8 @@ const PageInit = {
 
   // 設置通知
   setupNotifications() {
-    if (!CONFIG.ENABLE_NOTIFICATIONS) {
-      console.info('Notifications polling disabled (CONFIG.ENABLE_NOTIFICATIONS=false).');
+    if (!window.APP_CONFIG?.ENABLE_NOTIFICATIONS) {
+      console.info('Notifications polling disabled (ENABLE_NOTIFICATIONS=false).');
       return;
     }
     if (Auth.isAuthenticated()) {
