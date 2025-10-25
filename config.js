@@ -5,14 +5,20 @@ const CONFIG = {
   // Backend URL - automatically detects environment
   BACKEND_URL: (() => {
     const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    
+    console.log('Environment detection:', { hostname, protocol, fullUrl: window.location.href });
     
     // Development
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      console.log('Using development backend URL');
       return 'http://localhost:3001';
     }
     
     // Production - Render.com (serves both frontend and backend)
-    return 'https://everhealthier-backend.onrender.com';
+    const renderUrl = 'https://everhealthier-backend.onrender.com';
+    console.log('Using production backend URL:', renderUrl);
+    return renderUrl;
   })(),
   
   // FHIR Servers
