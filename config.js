@@ -11,8 +11,7 @@ const CONFIG = {
       return 'http://localhost:3001';
     }
     
-    // Production - Render.com backend
-    // Replace with your actual Render.com URL after deployment
+    // Production - Render.com (serves both frontend and backend)
     return 'https://everhealthier-backend.onrender.com';
   })(),
   
