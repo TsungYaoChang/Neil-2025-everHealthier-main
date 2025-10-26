@@ -323,6 +323,10 @@ class ClinicianDashboard {
 
     document.getElementById('viewAllAppointments')?.addEventListener('click', () => {
       this.showAllAppointments = !this.showAllAppointments;
+      const btn = document.getElementById('viewAllAppointments');
+      if (btn) {
+        btn.textContent = this.showAllAppointments ? 'Show Less' : 'View All';
+      }
       this.renderAppointments();
     });
 
@@ -1079,10 +1083,43 @@ class ClinicianDashboard {
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
       const adminUrl = `${HAPI_FHIR_BASE}/MedicationAdministration?subject=Patient/${patientId}&_count=1000`;
-      const adminResp = await fetch(adminUrl);
       
-      if (!adminResp.ok) {
-        console.warn(`Failed to fetch MedicationAdministrations for patient ${patientId}`);
+      // Add retry mechanism for MedicationAdministration fetch
+      const maxRetries = 5;
+      let adminResp = null;
+      let lastError = null;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          adminResp = await fetch(adminUrl);
+          
+          if (!adminResp.ok) {
+            if (attempt < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+              continue;
+            }
+            console.warn(`Failed to fetch MedicationAdministrations for patient ${patientId} after ${maxRetries} attempts`);
+            return {
+              adherenceYesterday: 0,
+              adherence7Days: 0
+            };
+          }
+          
+          // Success - break out of retry loop
+          break;
+        } catch (error) {
+          lastError = error;
+          
+          if (attempt < maxRetries) {
+            console.warn(`⚠️ MedicationAdministration fetch attempt ${attempt}/${maxRetries} failed for patient ${patientId}, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+          }
+        }
+      }
+      
+      // If all retries failed
+      if (!adminResp || !adminResp.ok) {
+        console.error(`❌ Failed to fetch MedicationAdministrations for patient ${patientId} after ${maxRetries} attempts:`, lastError?.message);
         return {
           adherenceYesterday: 0,
           adherence7Days: 0
@@ -1654,7 +1691,16 @@ class ClinicianDashboard {
       return;
     }
 
-    console.log(`✅ Rendering ${appointments.length} appointment(s)`);
+    console.log(`✅ Rendering ${appointments.length} appointment(s) (Total: ${patientsWithAppointments.length})`);
+    
+    // Update View All button text
+    const viewAllBtn = document.getElementById('viewAllAppointments');
+    if (viewAllBtn && patientsWithAppointments.length > 3) {
+      viewAllBtn.textContent = this.showAllAppointments ? 'Show Less' : `View All (${patientsWithAppointments.length})`;
+      viewAllBtn.style.display = 'block';
+    } else if (viewAllBtn) {
+      viewAllBtn.style.display = 'none';
+    }
 
     container.innerHTML = appointments.map(p => {
       const date = new Date(p.nextVisit);

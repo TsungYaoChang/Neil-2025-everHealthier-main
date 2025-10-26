@@ -43,13 +43,22 @@ class PatientDashboard {
     this.populateVitalsFromFhir();
     this.populatePatientInfoFromFhir();
 
-    // CALENDAR: initialize and initial reminder
+    // CALENDAR: initialize calendar first
     await this.initCalendar();
-    this.updateLogReminder();
     
-    // After calendar is initialized, load medication data and check completion status
+    // Load medication data and check completion status BEFORE updating log reminder
     await this.loadMedicationData();
     await this.checkTodayCompletionStatus();
+    
+    // NOW update log reminder with loaded data
+    this.updateLogReminder();
+    
+    // Sort suggestion articles based on patient health data (optional feature)
+    // Set ENABLE_AI_SORTING to false if you don't have a valid OpenRouter API key
+    const ENABLE_AI_SORTING = true; // Change to false to disable AI sorting
+    if (ENABLE_AI_SORTING) {
+      await this.sortSuggestionArticles();
+    }
   }
   
   // Load medication data and count medications due and taken
@@ -340,7 +349,7 @@ class PatientDashboard {
     }
   }
 
-  // Transforms FHIR bundle into dashboard data structure: patient, conditions, vitals, medications, requests, administrations
+  // Transforms FHIR bundle into dashboard data structure: patient, conditions, vitals, medications
   transformBundle(bundle) {
     if (!bundle || bundle.resourceType !== 'Bundle' || !Array.isArray(bundle.entry)) return null;
     const entries = bundle.entry.map(e => e.resource).filter(Boolean);
@@ -350,7 +359,6 @@ class PatientDashboard {
     const medStatements = entries.filter(r => r.resourceType === 'MedicationStatement');
     const medRequests = entries.filter(r => r.resourceType === 'MedicationRequest');
     const medAdministrations = entries.filter(r => r.resourceType === 'MedicationAdministration');
-    const questionnaireResponses = entries.filter(r => r.resourceType === 'QuestionnaireResponse');
 
     const patientName = patient?.name?.[0];
     let displayName = 'Patient';
@@ -370,6 +378,9 @@ class PatientDashboard {
     const gender = patient?.gender || '-';
     const birthDate = patient?.birthDate || '-';
     const age = birthDate && birthDate !== '-' ? this.calcAge(birthDate) : '-';
+    
+    // Extract generalPractitioner for Communication recipient
+    const generalPractitioner = patient?.generalPractitioner || null;
 
     function findLatestObs(codeSystem, code) {
       const candidates = observations.filter(o => o.code?.coding?.some(c => c.system === codeSystem && c.code === code));
@@ -393,8 +404,20 @@ class PatientDashboard {
     const meds = [...medStatements, ...medRequests].map(m => medText(m)).filter(Boolean);
 
     return {
-      patient: { name: displayName, id: resourceId, resourceId, identifier, gender, birthDate, age },
-      conditions: conditions.map(c => c.code?.text || c.code?.coding?.[0]?.display).filter(Boolean),
+      patient: { 
+        name: displayName, 
+        id: resourceId, 
+        resourceId, 
+        identifier, 
+        gender, 
+        birthDate, 
+        age,
+        generalPractitioner: generalPractitioner  // Add generalPractitioner reference
+      },
+      conditions: conditions.map(c => ({
+        text: c.code?.text || c.code?.coding?.[0]?.display,
+        recordedDate: c.recordedDate || c.onsetDateTime || null
+      })).filter(c => c.text),
       vitals: {
         bloodPressure: (systolic && diastolic) ? `${systolic.value}/${diastolic.value} ${systolic.unit || 'mmHg'}` : null,
         weight: weightObs?.valueQuantity ? `${weightObs.valueQuantity.value} ${weightObs.valueQuantity.unit}` : null,
@@ -403,7 +426,6 @@ class PatientDashboard {
       medications: meds,
       medRequests: medRequests,
       medAdministrations: medAdministrations,
-      questionnaireResponses
     };
   }
 
@@ -475,8 +497,28 @@ class PatientDashboard {
     set('ppGender', p.gender);
     set('ppBirthDate', p.birthDate);
     set('ppAge', p.age);
+    
+    // Display conditions with dates
     const condEl = document.getElementById('ppConditions');
-    if (condEl) condEl.textContent = (this.fhirData.conditions && this.fhirData.conditions.length) ? this.fhirData.conditions.join(', ') : '-';
+    if (condEl) {
+      if (this.fhirData.conditions && this.fhirData.conditions.length) {
+        // Format each condition with its date
+        const conditionsHTML = this.fhirData.conditions.map(cond => {
+          let dateStr = '';
+          if (cond.recordedDate) {
+            const date = new Date(cond.recordedDate);
+            dateStr = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+          }
+          return `<div class="mb-2">
+            <div class="font-medium">${cond.text}</div>
+            ${dateStr ? `<div class="text-xs text-gray-500">${dateStr}</div>` : ''}
+          </div>`;
+        }).join('');
+        condEl.innerHTML = conditionsHTML;
+      } else {
+        condEl.textContent = '-';
+      }
+    }
   }
 
   // Returns HTML template for patient profile cards
@@ -626,10 +668,30 @@ class PatientDashboard {
   // Renders reminders section: medications due/taken, next appointment info
   renderReminders() {
     console.log('🔔 renderReminders() called:');
-    console.log('  - medicationsDue:', this.medicationsDue);
-    console.log('  - medicationsTaken:', this.medicationsTaken);
+    console.log('  - medicationsDue (total doses):', this.medicationsDue);
+    console.log('  - medicationsTaken (doses taken):', this.medicationsTaken);
     
-    document.getElementById('dueMeds').textContent = this.medicationsDue;
+    // Display remaining medications (not taken yet)
+    const remainingMedications = this.medicationsDue - this.medicationsTaken;
+    const dueMedsEl = document.getElementById('dueMeds');
+    dueMedsEl.textContent = remainingMedications;
+    
+    // Update badge color based on remaining medications
+    // Remove all color classes first
+    dueMedsEl.classList.remove('bg-red-500', 'bg-amber-500', 'bg-green-500');
+    
+    if (remainingMedications === 0) {
+      // All medications taken - green
+      dueMedsEl.classList.add('bg-green-500');
+    } else if (remainingMedications > 0 && remainingMedications < this.medicationsDue) {
+      // Some taken but not all - orange/amber
+      dueMedsEl.classList.add('bg-amber-500');
+    } else {
+      // None taken - red
+      dueMedsEl.classList.add('bg-red-500');
+    }
+    
+    console.log('  - Remaining medications (displayed):', remainingMedications);
     
     if (!this.nextAppointment) {
       document.getElementById('daysToAppt').textContent = '-';
@@ -676,6 +738,12 @@ class PatientDashboard {
   
   // Shows reminders UI after data is loaded
   showRemindersUI() {
+    // Don't show UI if we're in updating state - hideUpdatingState() will handle it
+    if (this.isUpdating) {
+      console.log('⏸️ Skipping showRemindersUI() - currently updating');
+      return;
+    }
+    
     if (this.remindersLoaded) {
       const loadingEl = document.getElementById('todayRemindersLoading');
       const contentEl = document.getElementById('todayRemindersContent');
@@ -1182,8 +1250,15 @@ class PatientDashboard {
     
     if (isViewingToday) {
       // Update medication counts for Today's Completion calculation
+      // medicationsDue = total number of medication doses (rows in table)
+      // medicationsTaken = number of checked/taken doses
       this.medicationsDue = allMedications.length;
       this.medicationsTaken = takenMeds.length;
+      
+      console.log(`📊 Medication counts updated:`);
+      console.log(`  - Total doses (rows): ${allMedications.length}`);
+      console.log(`  - Doses taken (checked): ${takenMeds.length}`);
+      console.log(`  - Doses remaining: ${allMedications.length - takenMeds.length}`);
       
       // Update the completion display and due medications badge
       this.updateCompletion();
@@ -1306,19 +1381,121 @@ class PatientDashboard {
       // Refresh calendar to show updated data
       await this.renderCalendar();
       
-      // Refresh medication table and completion status if recording for today
+      // Refresh sections based on what was saved
       if (isToday) {
-        if (checkedMedications.length > 0) {
-          await this.populateMedicationTable();
+        // Determine what needs to be updated based on data saved
+        const hasMedicationUpdates = checkedMedications.length > 0;
+        const hasVitalSignsUpdates = hasVitalSignsData;
+        
+        if (hasMedicationUpdates || hasVitalSignsUpdates) {
+          // Show "Updating..." state if medications were updated
+          if (hasMedicationUpdates) {
+            this.showUpdatingState();
+          }
+          
+          try {
+            // Wait a bit for HAPI FHIR to process the new data
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Refresh medication table and reload medication data if needed
+            if (hasMedicationUpdates) {
+              await this.populateMedicationTable();
+              await this.loadMedicationData();
+            }
+            
+            // ALWAYS refresh completion status and log reminder when data is saved for today
+            await this.checkTodayCompletionStatus();
+            this.updateLogReminder();
+          } catch (error) {
+            console.error('Failed to refresh data:', error);
+          } finally {
+            if (hasMedicationUpdates) {
+              this.hideUpdatingState();
+            }
+          }
         }
-        // Refresh completion status from FHIR
-        await this.checkTodayCompletionStatus();
       }
     } catch (err) {
       console.error('Failed to save to HAPI FHIR:', err);
       Modal.hide('unifiedMonitoringModal');
       Utils.showNotification('Data saved locally, but failed to sync with HAPI FHIR: ' + err.message, 'warning');
     }
+  }
+
+  // Show "Updating..." state for sections being refreshed
+  showUpdatingState() {
+    console.log('🔄 Showing updating state...');
+    
+    // Set flag to prevent other updates
+    this.isUpdating = true;
+    
+    // Daily Medication section
+    const dueMedsEl = document.getElementById('dueMeds');
+    if (dueMedsEl) {
+      dueMedsEl.setAttribute('data-original-text', dueMedsEl.textContent);
+      dueMedsEl.textContent = '...';
+      dueMedsEl.classList.remove('bg-red-500', 'bg-amber-500', 'bg-green-500');
+      dueMedsEl.classList.add('bg-gray-400');
+    }
+    
+    // Today's Completion section
+    const completionTextEl = document.getElementById('completionText');
+    if (completionTextEl) {
+      completionTextEl.setAttribute('data-original-text', completionTextEl.textContent);
+      completionTextEl.textContent = 'Updating...';
+    }
+    
+    // Log Reminder section
+    const logReminderEl = document.getElementById('logReminder');
+    if (logReminderEl) {
+      logReminderEl.setAttribute('data-original-html', logReminderEl.innerHTML);
+      logReminderEl.innerHTML = '<span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-gray-400"></span> Updating...</span>';
+      logReminderEl.className = 'text-xs text-gray-500';
+    }
+    
+    // Hide content, show loading for both sections
+    const remindersContent = document.getElementById('todayRemindersContent');
+    const remindersLoading = document.getElementById('todayRemindersLoading');
+    if (remindersContent) remindersContent.classList.add('hidden');
+    if (remindersLoading) remindersLoading.classList.remove('hidden');
+    
+    const completionContent = document.getElementById('todayCompletionContent');
+    const completionLoading = document.getElementById('todayCompletionLoading');
+    if (completionContent) completionContent.classList.add('hidden');
+    if (completionLoading) completionLoading.classList.remove('hidden');
+  }
+
+  // Hide "Updating..." state after data is refreshed
+  hideUpdatingState() {
+    console.log('✅ Hiding updating state...');
+    
+    // Clear flag FIRST so showRemindersUI/showCompletionUI can execute
+    this.isUpdating = false;
+    
+    // Note: The actual values will be updated by renderReminders() and updateCompletion()
+    // This just ensures the loading state is cleared
+    const dueMedsEl = document.getElementById('dueMeds');
+    if (dueMedsEl) {
+      dueMedsEl.removeAttribute('data-original-text');
+      // Color will be set by renderReminders()
+    }
+    
+    const completionTextEl = document.getElementById('completionText');
+    if (completionTextEl) {
+      completionTextEl.removeAttribute('data-original-text');
+      // Text will be set by updateCompletion()
+    }
+    
+    // Log Reminder section
+    const logReminderEl = document.getElementById('logReminder');
+    if (logReminderEl) {
+      logReminderEl.removeAttribute('data-original-html');
+      // Content will be set by updateLogReminder()
+    }
+    
+    // Manually show content sections (renderReminders/updateCompletion might have been skipped due to isUpdating)
+    this.showRemindersUI();
+    this.showCompletionUI();
   }
 
   // Marks a monitoring task as done and updates completion status
@@ -1347,7 +1524,7 @@ class PatientDashboard {
     console.log('  - Total completion:', completed, '/', total, '=', Math.round((completed/total)*100) + '%');
     
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-    Chart.createProgressCircle('completionCircle', pct, { color: '#10B981' });
+    Chart.createProgressCircle('completionCircle', pct, { color: '#10B981', size: 80, fontSize: 16 });
     document.getElementById('completionCircle').style.justifyItems = 'center';
     document.getElementById('completionText').textContent = `${completed}/${total} completed`;
     
@@ -1358,6 +1535,12 @@ class PatientDashboard {
   
   // Shows completion UI after data is loaded
   showCompletionUI() {
+    // Don't show UI if we're in updating state - hideUpdatingState() will handle it
+    if (this.isUpdating) {
+      console.log('⏸️ Skipping showCompletionUI() - currently updating');
+      return;
+    }
+    
     if (this.completionLoaded) {
       const loadingEl = document.getElementById('todayCompletionLoading');
       const contentEl = document.getElementById('todayCompletionContent');
@@ -1551,24 +1734,6 @@ class PatientDashboard {
     };
   }
 
-  // Create Observation for symptoms/side effects (text)
-  // Creates FHIR Observation resource for symptoms/side effects (text)
-  createObsSymptoms(note, recordDate) {
-    if (!note || !note.trim()) return null;
-    const patientId = this.getPatientId();
-    if (!patientId) return null;
-
-    return {
-      resourceType: 'Observation',
-      status: 'final',
-      category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'survey' }] }],
-      code: { coding: [{ system: 'http://loinc.org', code: '75310-3' }], text: 'Symptoms [Text]' },
-      subject: { reference: `Patient/${patientId}` },
-      effectiveDateTime: this.isoNow(recordDate),
-      valueString: note.trim()
-    };
-  }
-
   // Create MedicationStatement (patient-reported medication taken)
   // Creates FHIR MedicationStatement resource for patient-reported medication taken
   createMedicationStatement({ name, doseText, timeHHmm, recordDate }) {
@@ -1598,6 +1763,61 @@ class PatientDashboard {
       dateAsserted: this.isoNow(), // When it was recorded (always now)
       dosage: doseText ? [{ text: doseText }] : undefined
     };
+  }
+
+  // Create Communication resource for patient's side effects/symptoms report
+  // Creates FHIR Communication resource for patient-reported side effects or symptoms
+  createCommunication({ message, recordDate }) {
+    if (!message || !message.trim()) return null;
+    const patientId = this.getPatientId();
+    if (!patientId) return null;
+
+    // Get practitioner from Patient's generalPractitioner field
+    // generalPractitioner is an array of references, e.g., [{ reference: "Practitioner/123" }]
+    console.log('📋 Patient data for Communication:', this.fhirData?.patient);
+    console.log('📋 generalPractitioner:', this.fhirData?.patient?.generalPractitioner);
+    
+    const practitionerRef = this.fhirData?.patient?.generalPractitioner?.[0]?.reference;
+    console.log('📋 Practitioner reference string:', practitionerRef);
+    
+    let practitionerId = null;
+    if (practitionerRef) {
+      // Handle both "Practitioner/123" and full URLs
+      if (practitionerRef.includes('/')) {
+        const parts = practitionerRef.split('/');
+        practitionerId = parts[parts.length - 1]; // Get last part (ID)
+      }
+    }
+    console.log('📋 Extracted practitioner ID:', practitionerId);
+
+    // Build Communication resource
+    const communication = {
+      resourceType: 'Communication',
+      status: 'in-progress',
+      category: [{
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/communication-category',
+          code: 'notification'
+        }]
+      }],
+      subject: { reference: `Patient/${patientId}` },
+      sender: { reference: `Patient/${patientId}` },
+      sent: this.isoNow(recordDate),
+      payload: [{
+        contentString: message.trim()
+      }]
+    };
+
+    // Add recipient - this should ALWAYS be included if patient has generalPractitioner
+    if (practitionerId) {
+      communication.recipient = [{ reference: `Practitioner/${practitionerId}` }];
+      console.log(`✅ Communication recipient added: Practitioner/${practitionerId}`);
+    } else {
+      console.error('❌ ERROR: No practitioner ID found! Patient should have generalPractitioner.');
+      console.error('Patient data:', this.fhirData?.patient);
+    }
+
+    return communication;
   }
 
   // Post FHIR Bundle transaction to HAPI FHIR
@@ -1660,7 +1880,8 @@ class PatientDashboard {
       this.createObsQuantity({ loinc: '3153-1', text: 'Intravascular intake 24h', unit: 'mL', code: 'mL', value: intake, recordDate }),
       this.createObsQuantity({ loinc: '3167-4', text: 'Urine output 24h', unit: 'mL', code: 'mL', value: urine, recordDate }),
       this.createMedicationStatement({ name: medName, doseText: medDose, timeHHmm: medTime, recordDate }),
-      this.createObsSymptoms(sideNotes, recordDate)
+      // Changed from Observation to Communication for side effects/symptoms
+      this.createCommunication({ message: sideNotes, recordDate })
     ];
 
     return this.postBundle(resources);
@@ -1788,7 +2009,7 @@ class PatientDashboard {
       
       // Fetch Observations - use date parameter (FHIR will match any time on this UTC date)
       // We'll filter by local date after fetching
-      const obsUrl = `${this.FHIR_BASE}/Observation?subject=Patient/${patientId}&date=${queryDate}&_sort=-date&_count=100`;
+      const obsUrl = `${this.FHIR_BASE}/Observation?subject=Patient/${patientId}&date=${queryDate}&_sort=-date&_count=300`;
       const obsRes = await fetch(obsUrl);
       
       const entries = [];
@@ -1820,6 +2041,55 @@ class PatientDashboard {
             // Filter: only include if local date matches
             if (medDateTime && this.isoToLocalDate(medDateTime) === dateKey) {
               entries.push(this.formatMedicationForDisplay(med));
+            }
+          });
+        }
+      }
+
+      // Fetch MedicationAdministrations for this date
+      const medAdminUrl = `${this.FHIR_BASE}/MedicationAdministration?subject=Patient/${patientId}&effective-time=${queryDate}&_count=100&_include=MedicationAdministration:request`;
+      const medAdminRes = await fetch(medAdminUrl);
+      
+      if (medAdminRes.ok) {
+        const medAdminBundle = await medAdminRes.json();
+        if (medAdminBundle.entry) {
+          // Create a map of MedicationRequest ID to medication name
+          const medRequestMap = new Map();
+          medAdminBundle.entry.forEach(entry => {
+            if (entry.resource.resourceType === 'MedicationRequest') {
+              const medReq = entry.resource;
+              const medName = medReq.medicationCodeableConcept?.text || 
+                             medReq.medicationCodeableConcept?.coding?.[0]?.display || null;
+              if (medName) {
+                medRequestMap.set(medReq.id, medName);
+              }
+            }
+          });
+          
+          medAdminBundle.entry.forEach(entry => {
+            if (entry.resource.resourceType === 'MedicationAdministration') {
+              const medAdmin = entry.resource;
+              const effectiveDateTime = medAdmin.effectiveDateTime || medAdmin.effectivePeriod?.start;
+              if (effectiveDateTime && this.isoToLocalDate(effectiveDateTime) === dateKey) {
+                entries.push(this.formatMedicationAdministrationForDisplay(medAdmin, medRequestMap));
+              }
+            }
+          });
+        }
+      }
+
+      // Fetch Communications for this date (patient's side effects/notes)
+      const commUrl = `${this.FHIR_BASE}/Communication?subject=Patient/${patientId}&sent=${queryDate}&_count=100`;
+      const commRes = await fetch(commUrl);
+      
+      if (commRes.ok) {
+        const commBundle = await commRes.json();
+        if (commBundle.entry) {
+          commBundle.entry.forEach(entry => {
+            const comm = entry.resource;
+            const sentDateTime = comm.sent;
+            if (sentDateTime && this.isoToLocalDate(sentDateTime) === dateKey) {
+              entries.push(this.formatCommunicationForDisplay(comm));
             }
           });
         }
@@ -1885,7 +2155,28 @@ class PatientDashboard {
     if (!obs) return null;
     
     const time = obs.effectiveDateTime ? new Date(obs.effectiveDateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+    
+    // Format lastUpdated as "MMM DD YYYY\nHH:MM AM/PM"
+    let lastUpdated = '';
+    if (obs.meta?.lastUpdated) {
+      const date = new Date(obs.meta.lastUpdated);
+      const datePart = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      });
+      const timePart = date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+      });
+      lastUpdated = `${datePart}\n${timePart}`;
+    }
+    
     const codeText = obs.code?.text || obs.code?.coding?.[0]?.display || 'Observation';
+    const loincCode = obs.code?.coding?.[0]?.code;
+    let text = '';
+    let category = 'vital';
 
     // Handle different types of observations
     if (obs.component && obs.component.length > 0) {
@@ -1893,15 +2184,30 @@ class PatientDashboard {
       const systolic = obs.component.find(c => c.code?.coding?.some(cd => cd.code === '8480-6'));
       const diastolic = obs.component.find(c => c.code?.coding?.some(cd => cd.code === '8462-4'));
       if (systolic && diastolic) {
-        return `${time} BP ${systolic.valueQuantity?.value}/${diastolic.valueQuantity?.value} mmHg`;
+        text = `Blood Pressure: ${systolic.valueQuantity?.value}/${diastolic.valueQuantity?.value} mmHg`;
       }
     } else if (obs.valueQuantity) {
-      return `${time} ${codeText} ${obs.valueQuantity.value} ${obs.valueQuantity.unit || obs.valueQuantity.code || ''}`;
+      // Map LOINC codes to standard names
+      let itemName = codeText;
+      if (loincCode === '29463-7') {
+        itemName = 'Weight';
+      } else if (loincCode === '8310-5') {
+        itemName = 'Body Temperature';
+      } else if (loincCode === '3153-1' || loincCode === '81951-6') {
+        itemName = 'Fluid Intake';
+      } else if (loincCode === '3167-4') {
+        itemName = 'Urine Output';
+      }
+      
+      text = `${itemName}: ${obs.valueQuantity.value} ${obs.valueQuantity.unit || obs.valueQuantity.code || ''}`;
     } else if (obs.valueString) {
-      return `${time} ${codeText}: ${obs.valueString}`;
+      text = `${codeText}: ${obs.valueString}`;
+      category = 'sideEffects';
+    } else {
+      text = codeText;
     }
 
-    return `${time} ${codeText}`;
+    return { category, time, text, lastUpdated };
   }
 
   // Format MedicationStatement for display
@@ -1909,10 +2215,186 @@ class PatientDashboard {
     if (!med) return null;
     
     const time = med.effectiveDateTime ? new Date(med.effectiveDateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+    
+    // Format lastUpdated as "MMM DD YYYY\nHH:MM AM/PM"
+    let lastUpdated = '';
+    if (med.meta?.lastUpdated) {
+      const date = new Date(med.meta.lastUpdated);
+      const datePart = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      });
+      const timePart = date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+      });
+      lastUpdated = `${datePart}\n${timePart}`;
+    }
+    
     const medName = med.medicationCodeableConcept?.text || 'Medication';
     const dose = med.dosage?.[0]?.text || '';
     
-    return `${time} Medication: ${medName}${dose ? ' - ' + dose : ''}`;
+    return { 
+      category: 'medication', 
+      time: time,
+      text: `Medication: ${medName}${dose ? '\n' + dose : ''}`,
+      lastUpdated
+    };
+  }
+
+  // Format MedicationAdministration for display
+  formatMedicationAdministrationForDisplay(medAdmin, medRequestMap = null) {
+    if (!medAdmin) return null;
+    
+    console.log('📋 Formatting MedicationAdministration:', medAdmin);
+    
+    const time = medAdmin.effectiveDateTime ? new Date(medAdmin.effectiveDateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+    
+    // Try to get medication name from medicationCodeableConcept first
+    let medName = medAdmin.medicationCodeableConcept?.text || 
+                  medAdmin.medicationCodeableConcept?.coding?.[0]?.display || null;
+    
+    // If not found, try to get from the medRequestMap (passed from loadDayDataFromFhir)
+    if (!medName && medRequestMap && medAdmin.request?.reference) {
+      const requestRef = medAdmin.request.reference; // e.g., "MedicationRequest/123"
+      const medRequestId = requestRef.split('/')[1];
+      medName = medRequestMap.get(medRequestId) || null;
+      console.log('  - Looking up from medRequestMap:', medRequestId, '→', medName);
+    }
+    
+    // If still not found, try to get from fhirData.medRequests
+    if (!medName && medAdmin.request?.reference) {
+      const requestRef = medAdmin.request.reference; // e.g., "MedicationRequest/123"
+      const medRequestId = requestRef.split('/')[1];
+      
+      // Look up the medication name from fhirData.medRequests
+      const medRequest = this.fhirData?.medRequests?.find(mr => mr.id === medRequestId);
+      if (medRequest) {
+        medName = medRequest.medicationCodeableConcept?.text || 
+                  medRequest.medicationCodeableConcept?.coding?.[0]?.display || null;
+        console.log('  - Looking up from fhirData.medRequests:', medRequestId, '→', medName);
+      }
+    }
+    
+    // Fallback to "Medication" if still not found
+    medName = medName || 'Medication';
+    
+    console.log('  - Final Medication Name:', medName);
+    
+    // Get dose value and unit
+    const doseValue = medAdmin.dosage?.dose?.value || '';
+    const doseUnit = medAdmin.dosage?.dose?.unit || '';
+    const dose = doseValue && doseUnit ? `${doseValue} ${doseUnit}` : '';
+    
+    console.log('  - Dose:', dose);
+    
+    // Extract timing code from dosage.text (format: "Timing: ACM") or note
+    let timingCode = '';
+    const dosageText = medAdmin.dosage?.text || '';
+    const timingMatch = dosageText.match(/Timing:\s*(\w+)/);
+    if (timingMatch) {
+      timingCode = timingMatch[1];
+    } else if (medAdmin.note && medAdmin.note.length > 0) {
+      // Try to get from note field (format: "timing:ACM")
+      const noteText = medAdmin.note[0].text || '';
+      const noteMatch = noteText.match(/timing:(\w+)/);
+      if (noteMatch) {
+        timingCode = noteMatch[1];
+      }
+    }
+    
+    console.log('  - Timing Code:', timingCode);
+    
+    // Map timing codes to full text labels
+    const timingLabels = {
+      'MORN': 'Morning',
+      'NOON': 'Noon',
+      'EVE': 'Evening',
+      'NIGHT': 'Night',
+      'ACM': 'Before Breakfast',
+      'ACL': 'Before Lunch',
+      'ACD': 'Before Dinner',
+      'PCM': 'After Breakfast',
+      'PCL': 'After Lunch',
+      'PCD': 'After Dinner',
+      'HS': 'At Bedtime'
+    };
+    
+    const timingLabel = timingLabels[timingCode] || timingCode;
+    
+    console.log('  - Timing Label:', timingLabel);
+    
+    // Format: Medication name with line break before dose and timing
+    // Example: Mycophenolate mofetil 500 mg tablet :
+    //          2 tablet (Before Breakfast)
+    let text = medName + ' :';
+    if (dose) {
+      text += `\n${dose}`;
+    }
+    if (timingLabel) {
+      text += ` (${timingLabel})`;
+    }
+    
+    console.log('  - Final Text:', text);
+    
+    // Format lastUpdated as "MMM DD YYYY\nHH:MM AM/PM"
+    let lastUpdated = '';
+    if (medAdmin.meta?.lastUpdated) {
+      const date = new Date(medAdmin.meta.lastUpdated);
+      const datePart = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      });
+      const timePart = date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+      });
+      lastUpdated = `${datePart}\n${timePart}`;
+    }
+    
+    return { 
+      category: 'medication', 
+      time: time,
+      text: text,
+      lastUpdated
+    };
+  }
+
+  // Format Communication for display
+  formatCommunicationForDisplay(comm) {
+    if (!comm) return null;
+    
+    const time = comm.sent ? new Date(comm.sent).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+    
+    // Format lastUpdated as "MMM DD YYYY\nHH:MM AM/PM"
+    let lastUpdated = '';
+    if (comm.meta?.lastUpdated) {
+      const date = new Date(comm.meta.lastUpdated);
+      const datePart = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      });
+      const timePart = date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+      });
+      lastUpdated = `${datePart}\n${timePart}`;
+    }
+    
+    const message = comm.payload?.[0]?.contentString || 'No message';
+    
+    return { 
+      category: 'sideEffects', 
+      time: time,
+      text: message,  // Remove "Side Effects/Notes:" prefix
+      lastUpdated
+    };
   }
 
   // Load month overview from HAPI FHIR to update calendar
@@ -2076,7 +2558,7 @@ class PatientDashboard {
       const container = document.getElementById('med-' + id).closest('div');
       const statusDiv = container.querySelector('div:last-child');
       statusDiv.textContent = medication.taken ? 'Taken' : 'Not taken';
-      statusDiv.className = 'text-sm ' + (medication.taken ? 'text-green-600' : 'text-gray-500');
+      statusDiv.className = 'text-sm ' + (medication.taken ? 'text-green-600' : 'text-amber-500');
     }
   }
 
@@ -2109,16 +2591,26 @@ class PatientDashboard {
   }
 
   updateMedicationDueCount() {
-    const dueCount = this.todayMedications.filter(med => !med.taken).length;
-    this.medicationsDue = dueCount;
+    // Calculate remaining medications (not taken yet)
+    const remainingMedications = this.medicationsDue - this.medicationsTaken;
     const dueElement = document.getElementById('dueMeds');
+    
     if (dueElement) {
-      dueElement.textContent = dueCount;
-      if (dueCount === 0) {
-        dueElement.classList.remove('bg-red-500');
+      // Display remaining medications count
+      dueElement.textContent = remainingMedications;
+      
+      // Update badge color based on remaining medications
+      // Remove all color classes first
+      dueElement.classList.remove('bg-red-500', 'bg-amber-500', 'bg-green-500');
+      
+      if (remainingMedications === 0) {
+        // All medications taken - green
         dueElement.classList.add('bg-green-500');
+      } else if (remainingMedications > 0 && remainingMedications < this.medicationsDue) {
+        // Some taken but not all - orange/amber
+        dueElement.classList.add('bg-amber-500');
       } else {
-        dueElement.classList.remove('bg-green-500');
+        // None taken - red
         dueElement.classList.add('bg-red-500');
       }
     }
@@ -2279,8 +2771,8 @@ class PatientDashboard {
     const dateEl = document.getElementById('dayDetailDate');
     if (!modal) return;
 
-    dateEl.textContent = this.humanDate(key);
-    list.innerHTML = '<li class="text-gray-500 italic">Loading data from HAPI FHIR...</li>';
+    dateEl.textContent = this.humanDate(key) + ' - Report Log';
+    list.innerHTML = '<p class="text-gray-500 italic">Loading data from HAPI FHIR...</p>';
     
     // Show modal first
     Modal.show ? Modal.show('dayDetailModal') : (modal.classList.remove('hidden'), modal.classList.add('flex'));
@@ -2289,23 +2781,99 @@ class PatientDashboard {
       // Load data from HAPI FHIR only (not from localStorage)
       const fhirEntries = await this.loadDayDataFromFhir(key);
 
-      // Display results
+      // Categorize entries
+      const categorized = {
+        vital: [],
+        medication: [],
+        sideEffects: []
+      };
+
+      fhirEntries.forEach(entry => {
+        if (entry && entry.category && categorized[entry.category]) {
+          categorized[entry.category].push(entry);
+        }
+      });
+
+      // Display results in table format
       list.innerHTML = '';
       
-      if (fhirEntries.length > 0) {
+      const totalEntries = fhirEntries.length;
+      
+      if (totalEntries > 0) {
         empty.classList.add('hidden');
-        fhirEntries.forEach(txt => {
-          const li = document.createElement('li');
-          li.className = 'py-2 px-3 hover:bg-gray-50 rounded';
-          li.textContent = typeof txt === 'string' ? txt : (txt.text || JSON.stringify(txt));
-          list.appendChild(li);
-        });
         
-        // Add source indicator
-        const sourceInfo = document.createElement('li');
-        sourceInfo.className = 'mt-3 pt-3 border-t text-xs text-gray-500 italic';
-        sourceInfo.textContent = `${fhirEntries.length} entries loaded from HAPI FHIR`;
-        list.appendChild(sourceInfo);
+        // Create table
+        const table = document.createElement('table');
+        table.className = 'w-full text-sm border-collapse';
+        
+        // Table header
+        const thead = document.createElement('thead');
+        thead.innerHTML = `
+          <tr class="border-b bg-gray-50">
+            <th class="text-left px-3 py-2 font-semibold">Category</th>
+            <th class="text-left px-3 py-2 font-semibold" style="min-width: 90px;">Time</th>
+            <th class="text-left px-3 py-2 font-semibold">Details</th>
+            <th class="text-left px-3 py-2 font-semibold" style="min-width: 120px;">Last Updated</th>
+          </tr>
+        `;
+        table.appendChild(thead);
+        
+        // Table body
+        const tbody = document.createElement('tbody');
+        
+        // Add Vital Signs
+        if (categorized.vital.length > 0) {
+          categorized.vital.forEach(entry => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b hover:bg-gray-50';
+            tr.innerHTML = `
+              <td class="px-3 py-2"><span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Vital Sign</span></td>
+              <td class="px-3 py-2" style="min-width: 90px;">${entry.time}</td>
+              <td class="px-3 py-2" style="white-space: pre-line;">${entry.text}</td>
+              <td class="px-3 py-2 text-xs text-gray-500" style="min-width: 120px; white-space: pre-line;">${entry.lastUpdated || 'N/A'}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+        
+        // Add Medications
+        if (categorized.medication.length > 0) {
+          categorized.medication.forEach(entry => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b hover:bg-gray-50';
+            tr.innerHTML = `
+              <td class="px-3 py-2"><span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Medication</span></td>
+              <td class="px-3 py-2" style="min-width: 90px;">${entry.time}</td>
+              <td class="px-3 py-2" style="white-space: pre-line;">${entry.text}</td>
+              <td class="px-3 py-2 text-xs text-gray-500" style="min-width: 120px; white-space: pre-line;">${entry.lastUpdated || 'N/A'}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+        
+        // Add Side Effects / Notes
+        if (categorized.sideEffects.length > 0) {
+          categorized.sideEffects.forEach(entry => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b hover:bg-gray-50';
+            tr.innerHTML = `
+              <td class="px-3 py-2"><span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Note</span></td>
+              <td class="px-3 py-2" style="min-width: 90px;">${entry.time}</td>
+              <td class="px-3 py-2" style="white-space: pre-line;">${entry.text}</td>
+              <td class="px-3 py-2 text-xs text-gray-500" style="min-width: 120px; white-space: pre-line;">${entry.lastUpdated || 'N/A'}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+        
+        table.appendChild(tbody);
+        list.appendChild(table);
+        
+        // Add summary
+        const summary = document.createElement('p');
+        summary.className = 'mt-3 pt-3 border-t text-xs text-gray-500 italic';
+        summary.textContent = `Total: ${totalEntries} entries (${categorized.vital.length} vital signs, ${categorized.medication.length} medications, ${categorized.sideEffects.length} notes)`;
+        list.appendChild(summary);
       } else {
         empty.classList.remove('hidden');
       }
@@ -2318,15 +2886,394 @@ class PatientDashboard {
   updateLogReminder() {
     const el = document.getElementById('logReminder');
     if (!el) return;
-    const key = this.ymd(new Date());
-    const items = Array.isArray(this.patientLogs[key]) ? this.patientLogs[key] : [];
-    if (items.length === 0) {
+    
+    // Calculate total tasks that should be completed today
+    // Monitoring tasks: 5 items (BP counts as 1, Weight, Temperature, Fluid Intake, Urine Output)
+    // Medication tasks: medicationsDue (number of medication doses)
+    const monitoringTasks = Object.keys(this.tasks).length; // Should be 5
+    const completedMonitoring = Object.values(this.tasks).filter(Boolean).length;
+    const totalTasksExpected = monitoringTasks + this.medicationsDue;
+    const completedCount = completedMonitoring + this.medicationsTaken;
+    const remaining = totalTasksExpected - completedCount;
+    
+    console.log('📋 updateLogReminder() debug:');
+    console.log('  - Monitoring tasks (total):', monitoringTasks);
+    console.log('  - Monitoring completed:', completedMonitoring);
+    console.log('  - Medication doses (total):', this.medicationsDue);
+    console.log('  - Medication taken:', this.medicationsTaken);
+    console.log('  - Total tasks expected:', totalTasksExpected);
+    console.log('  - Completed count:', completedCount);
+    console.log('  - Remaining:', remaining);
+    
+    if (completedCount === 0 && totalTasksExpected > 0) {
+      // No tasks completed at all - red warning
       el.innerHTML = '<span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-rose-500"></span> Don\'t forget to log today\'s data</span>';
       el.className = 'text-xs text-rose-600';
+    } else if (remaining > 0) {
+      // Some tasks completed but not all - amber warning
+      el.innerHTML = `<span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-500"></span> ${remaining} task${remaining > 1 ? 's' : ''} remaining</span>`;
+      el.className = 'text-xs text-amber-600';
     } else {
+      // All tasks completed - green success
       el.textContent = 'All set for today';
       el.className = 'text-xs text-emerald-600';
     }
+  }
+
+  // Sort suggestion articles based on patient health data using AI
+  async sortSuggestionArticles() {
+    try {
+      console.log('🤖 Sorting suggestion articles with AI...');
+      
+      // Get patient health data (now async to fetch Communications)
+      const patientData = await this.getPatientHealthSummary();
+      
+      // Define articles
+      const articles = [
+        {
+          id: 1,
+          title: "Post-Transplant Daily Care Essentials",
+          subtitle: "Lifestyle, exercise, sleep, and self-monitoring tips",
+          description: "Congratulations on your kidney transplant! Begin your new chapter with healthy daily routines. Maintain 7–8 hours of sleep, avoid smoking, limit alcohol, stay hydrated, and practice good hygiene to prevent infections. Exercise regularly—start with walking 10–15 min daily, progress to 30 min, and consider swimming, cycling, or yoga after recovery. Always consult your healthcare team before new activities. Monitor your health: track daily weight, check blood pressure, temperature, and medication adherence, and report unusual symptoms. For better sleep, keep a consistent bedtime, limit screens before bed, reduce caffeine after 2 PM, and create a calm sleep environment. Follow your healthcare team's personalized advice for the best transplant outcomes.",
+          url: "article-detail.html?id=1",
+          icon: "M12 6v12m6-6H6",
+          iconColor: "text-blue-600"
+        },
+        {
+          id: 4,
+          title: "Infection Prevention",
+          subtitle: "Temperature checks, hand hygiene, going out & crowds",
+          description: "After a kidney transplant, immunosuppression raises infection risk. Monitor temperature and call your team if ≥100.4°F (38°C). Hand hygiene: wash ≥20s; use ≥60% alcohol sanitizer; avoid touching face. Social: prefer small/outdoor/virtual; avoid crowds, sick contacts, and recent live-vaccine recipients; don’t share food/utensils. Food safety: avoid raw/undercooked meats/fish/eggs and unpasteurized products; wash produce; cook to safe temps; refrigerate promptly and eat leftovers within 2–3 days. Home: clean high-touch surfaces daily; don’t share personal items; change linens weekly; avoid soil/gardening; keep pets clean/vaccinated and wash hands after handling. Warning signs—seek care: fever ≥100.4°F/38°C, chills/night sweats, cough/shortness of breath/chest pain, painful urination, wound drainage, persistent vomiting/diarrhea, unusual fatigue, incision infection signs. Vaccines: get annual inactivated flu shot; keep routine vaccines up to date; avoid live vaccines; ensure household is vaccinated; discuss COVID-19 vaccination with your team.",
+          url: "article-detail.html?id=4",
+          icon: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+          iconColor: "text-rose-600"
+        },
+        {
+          id: 2,
+          title: "Diet Principles & FAQs",
+          subtitle: "Protein, sodium, potassium-rich foods, and hydration",
+          description: "Proper nutrition is key to recovery after a kidney transplant. Aim for 1.0–1.2g protein per kg of body weight daily from lean sources like chicken, fish, eggs, and legumes—avoid excess red meat. Limit sodium to 2,000–3,000mg per day by avoiding processed foods, reading labels, and seasoning with herbs instead of salt. Stay hydrated with 8–10 glasses of water daily, adjust for weather or activity, and limit sugary or caffeinated drinks. Avoid grapefruit and pomegranate—they interfere with transplant medications. Do not eat raw or undercooked meats, eggs, or unpasteurized dairy. Only take supplements approved by your transplant team. Work with a registered dietitian for personalized guidance to protect your new kidney and overall health.",
+          url: "article-detail.html?id=2",
+          icon: "M12 8c-3 0-5 2-5 5v5h10v-5c0-3-2-5-5-5z",
+          iconColor: "text-orange-600"
+        },
+        {
+          id: 3,
+          title: "Common Side Effects & When to Seek Care",
+          subtitle: "When to contact your care team vs. watch-and-wait",
+          description: "Immunosuppressive medications protect your transplanted kidney but may cause side effects. Mild effects like nausea, headaches, hand tremors, acne, or mild swelling can be monitored. Contact your care team if you have persistent vomiting, diarrhea over 24 hours, fever above 100.4°F (38°C), rapid weight gain, or increased swelling. Seek emergency help for chest pain, severe abdominal pain, blood in urine or stool, confusion, or severe headache with vision changes. For minor issues: take meds with food to reduce nausea, rest and hydrate for headaches, and use gentle skincare with sunscreen for skin changes. Always inform your transplant team about any new or worsening symptoms—they're there to help and guide you safely.",
+          url: "article-detail.html?id=3",
+          icon: "M12 6v6m0 6H6m6 0h6",
+          iconColor: "text-gray-700"
+        }
+      ];
+      
+      // Call OpenRouter API to get ranking
+      const sortedArticles = await this.rankArticlesWithAI(patientData, articles);
+      
+      // Update UI with sorted articles
+      this.renderSortedArticles(sortedArticles);
+      
+      // Update title to show AI was used successfully
+      const titleEl = document.getElementById('suggestionTitle');
+      if (titleEl) {
+        titleEl.textContent = 'AI Suggestion';
+      }
+      
+      console.log('✅ Articles sorted successfully with AI');
+    } catch (error) {
+      console.error('❌ Error sorting articles:', error);
+      // If AI sorting fails, title remains as "Suggestion"
+      console.log('ℹ️ Displaying articles in default order');
+    }
+  }
+
+  // Get patient health summary for AI analysis
+  async getPatientHealthSummary() {
+    const patient = this.fhirData?.patient;
+    const conditions = this.fhirData?.conditions || [];
+    const observations = this.fhirData?.observations || [];
+    
+    // Calculate date 7 days ago
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    // Helper function to find latest observation within last 7 days
+    const findLatestObs = (code) => {
+      const candidates = observations.filter(obs => {
+        if (obs.code?.coding?.[0]?.code !== code) return false;
+        const obsDate = new Date(obs.effectiveDateTime || obs.issued || 0);
+        return obsDate >= sevenDaysAgo;
+      });
+      candidates.sort((a, b) => {
+        const dateA = new Date(a.effectiveDateTime || a.issued || 0);
+        const dateB = new Date(b.effectiveDateTime || b.issued || 0);
+        return dateB - dateA;
+      });
+      return candidates[0];
+    };
+    
+    // Extract recent vital signs (last 7 days)
+    const recentBP = findLatestObs('85354-9');
+    const recentWeight = findLatestObs('29463-7');
+    const recentTemp = findLatestObs('8310-5');
+    const recentCreatinine = findLatestObs('2160-0');
+    const recentEGFR = findLatestObs('98979-8');
+    
+    // Extract recent lab values (last 7 days)
+    const recentTacrolimus = findLatestObs('11253-2');  // Tacrolimus
+    const recentBUN = findLatestObs('3094-0');          // BUN
+    const recentProtein24h = findLatestObs('2889-4');   // Protein [Mass/time] in 24 hour Urine
+    const recentRBC = findLatestObs('789-8');           // Red Blood Cell (RBC)
+    const recentWBC = findLatestObs('6690-2');          // White Blood Cells (WBC)
+    const recentCRP = findLatestObs('1988-5');          // C-Reactive Protein (CRP)
+    
+    // Fetch Communications (patient-reported side effects and symptoms)
+    const patientId = this.getPatientId();
+    let communications = [];
+    
+    if (patientId) {
+      try {
+        // Fetch recent Communications from HAPI FHIR (last 7 days)
+        const startDate = sevenDaysAgo.toISOString().split('T')[0];
+        
+        const commUrl = `${this.FHIR_BASE}/Communication?subject=Patient/${patientId}&sent=ge${startDate}&_sort=-sent&_count=20`;
+        const commRes = await fetch(commUrl);
+        
+        if (commRes.ok) {
+          const commBundle = await commRes.json();
+          if (commBundle.entry) {
+            communications = commBundle.entry.map(entry => {
+              const comm = entry.resource;
+              return {
+                date: comm.sent ? new Date(comm.sent).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric' 
+                }) : 'Unknown',
+                message: comm.payload?.[0]?.contentString || 'No message'
+              };
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching Communications:', error);
+      }
+    }
+    
+    // Calculate adherence rate for last 7 days
+    let adherenceRate = 100;
+    if (patientId) {
+      try {
+        const startDate = sevenDaysAgo.toISOString().split('T')[0];
+        
+        // Query MedicationAdministration for last 7 days
+        const medAdminUrl = `${this.FHIR_BASE}/MedicationAdministration?subject=Patient/${patientId}&effective=ge${startDate}&_count=100`;
+        const medAdminRes = await fetch(medAdminUrl);
+        
+        if (medAdminRes.ok) {
+          const medAdminBundle = await medAdminRes.json();
+          const takenCount = medAdminBundle.total || medAdminBundle.entry?.length || 0;
+          
+          // Estimate expected doses: assume 3 medications × 2-3 times/day × 7 days ≈ 42-63 doses
+          // Use current daily expected doses × 7 as approximation
+          const expectedCount = this.medicationsDue > 0 ? this.medicationsDue * 7 : 42;
+          
+          adherenceRate = expectedCount > 0 
+            ? Math.round((takenCount / expectedCount) * 100) 
+            : 100;
+        }
+      } catch (error) {
+        console.error('Error calculating 7-day adherence:', error);
+        // Fallback to daily data
+        adherenceRate = this.medicationsDue > 0 
+          ? Math.round((this.medicationsTaken / this.medicationsDue) * 100) 
+          : 100;
+      }
+    } else {
+      // Fallback to daily data
+      adherenceRate = this.medicationsDue > 0 
+        ? Math.round((this.medicationsTaken / this.medicationsDue) * 100) 
+        : 100;
+    }
+    
+    // Calculate completion rate (still daily data - self-monitoring tasks are daily)
+    // Note: Self-monitoring tasks are inherently daily, so we keep this as daily completion rate
+    const completionRate = this.tasks ? Object.values(this.tasks).filter(Boolean).length / Object.keys(this.tasks).length * 100 : 0;
+    
+    return {
+      age: patient?.birthDate ? this.calculateAge(patient.birthDate) : null,
+      gender: patient?.gender || 'unknown',
+      conditions: conditions.map(c => c.code?.text || c.code?.coding?.[0]?.display || 'Unknown condition'),
+      vitalSigns: {
+        bloodPressure: recentBP ? this.extractBPValue(recentBP) : null,
+        weight: recentWeight?.valueQuantity?.value || null,
+        temperature: recentTemp?.valueQuantity?.value || null,
+        creatinine: recentCreatinine?.valueQuantity?.value || null,
+        eGFR: recentEGFR?.valueQuantity?.value || null
+      },
+      labValues: {
+        tacrolimus: recentTacrolimus?.valueQuantity?.value || null,
+        tacrilimusUnit: recentTacrolimus?.valueQuantity?.unit || recentTacrolimus?.valueQuantity?.code || null,
+        bun: recentBUN?.valueQuantity?.value || null,
+        bunUnit: recentBUN?.valueQuantity?.unit || recentBUN?.valueQuantity?.code || null,
+        protein24h: recentProtein24h?.valueQuantity?.value || null,
+        protein24hUnit: recentProtein24h?.valueQuantity?.unit || recentProtein24h?.valueQuantity?.code || null,
+        rbc: recentRBC?.valueQuantity?.value || null,
+        rbcUnit: recentRBC?.valueQuantity?.unit || recentRBC?.valueQuantity?.code || null,
+        wbc: recentWBC?.valueQuantity?.value || null,
+        wbcUnit: recentWBC?.valueQuantity?.unit || recentWBC?.valueQuantity?.code || null,
+        crp: recentCRP?.valueQuantity?.value || null,
+        crpUnit: recentCRP?.valueQuantity?.unit || recentCRP?.valueQuantity?.code || null
+      },
+      medicationAdherence: adherenceRate,
+      completionRate: completionRate,
+      patientReportedSymptoms: communications
+    };
+  }
+
+  // Calculate age from birth date
+  calculateAge(birthDate) {
+    const birth = new Date(birthDate);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  }
+
+  // Extract blood pressure value from observation
+  extractBPValue(bpObservation) {
+    const systolic = bpObservation.component?.find(c => c.code?.coding?.[0]?.code === '8480-6')?.valueQuantity?.value;
+    const diastolic = bpObservation.component?.find(c => c.code?.coding?.[0]?.code === '8462-4')?.valueQuantity?.value;
+    return systolic && diastolic ? `${systolic}/${diastolic}` : null;
+  }
+
+  // Rank articles using OpenRouter AI
+  async rankArticlesWithAI(patientData, articles) {
+    // Note: If you get 401 errors, the API key may have expired
+    // Get a new key from: https://openrouter.ai/keys
+    const OPENROUTER_API_KEY = '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';
+
+    const prompt = `You are a healthcare AI assistant for post kidney transplant patients. 
+                    Based on the following patient health data, 
+                    rank these 4 health education articles in order of priority (most important first).
+
+Patient Health Summary (Last 7 Days):
+- Age: ${patientData.age || 'Unknown'}
+- Gender: ${patientData.gender}
+- Medical Conditions: ${patientData.conditions.join(', ') || 'None recorded'}
+- Recent Vital Signs (Last 7 Days):
+  * Blood Pressure: ${patientData.vitalSigns.bloodPressure || 'Not recorded'}
+  * Weight: ${patientData.vitalSigns.weight ? patientData.vitalSigns.weight + ' kg' : 'Not recorded'}
+  * Temperature: ${patientData.vitalSigns.temperature ? patientData.vitalSigns.temperature + ' °C' : 'Not recorded'}
+  * Creatinine: ${patientData.vitalSigns.creatinine ? patientData.vitalSigns.creatinine + ' mg/dL' : 'Not recorded'}
+  * eGFR: ${patientData.vitalSigns.eGFR ? patientData.vitalSigns.eGFR + ' mL/min/1.73m²' : 'Not recorded'}
+- Recent Lab Values (Last 7 Days):
+  * Tacrolimus: ${patientData.labValues.tacrolimus ? patientData.labValues.tacrolimus + ' ' + (patientData.labValues.tacrilimusUnit || '') : 'Not recorded'}
+  * BUN (Blood Urea Nitrogen): ${patientData.labValues.bun ? patientData.labValues.bun + ' ' + (patientData.labValues.bunUnit || '') : 'Not recorded'}
+  * Protein (24h Urine): ${patientData.labValues.protein24h ? patientData.labValues.protein24h + ' ' + (patientData.labValues.protein24hUnit || '') : 'Not recorded'}
+  * RBC (Red Blood Cell): ${patientData.labValues.rbc ? patientData.labValues.rbc + ' ' + (patientData.labValues.rbcUnit || '') : 'Not recorded'}
+  * WBC (White Blood Cell): ${patientData.labValues.wbc ? patientData.labValues.wbc + ' ' + (patientData.labValues.wbcUnit || '') : 'Not recorded'}
+  * CRP (C-Reactive Protein): ${patientData.labValues.crp ? patientData.labValues.crp + ' ' + (patientData.labValues.crpUnit || '') : 'Not recorded'}
+- Medication Adherence (Last 7 Days): ${patientData.medicationAdherence}%
+- Self-Monitoring Completion (Today): ${Math.round(patientData.completionRate)}%
+- Patient Reported Symptoms/Side Effects (Last 7 Days):
+${patientData.patientReportedSymptoms.length > 0 
+  ? patientData.patientReportedSymptoms.map(s => `  * ${s.date}: ${s.message}`).join('\n')
+  : '  * None reported'}
+
+Articles to rank:
+${articles.map((a, i) => `${i + 1}. "${a.title}" - ${a.description}`).join('\n')}
+
+Please respond with ONLY a JSON array of article IDs in priority order, like this: [4, 1, 2, 3]
+Do not include any explanation, just the JSON array.`;
+
+    try {
+      console.log('🔑 Using API key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
+      console.log('🌐 Calling OpenRouter API...');
+      
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': window.location.origin || 'http://localhost:3001',
+          'X-Title': 'everHealthier Patient Dashboard'
+        },
+        body: JSON.stringify({
+          // Using a free model - check https://openrouter.ai/models for available free models
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 100
+        })
+      });
+
+      console.log('📡 API Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('❌ API Error Body:', errorBody);
+        throw new Error(`OpenRouter API error: ${response.status} - ${errorBody}`);
+      }
+
+      const data = await response.json();
+      const aiResponse = data.choices?.[0]?.message?.content?.trim();
+      
+      console.log('🤖 AI Response:', aiResponse);
+      
+      // Parse the AI response to get article IDs
+      const rankedIds = JSON.parse(aiResponse);
+      
+      // Sort articles based on AI ranking
+      const sortedArticles = rankedIds.map(id => articles.find(a => a.id === id)).filter(Boolean);
+      
+      // Add any missing articles to the end
+      articles.forEach(article => {
+        if (!sortedArticles.find(a => a.id === article.id)) {
+          sortedArticles.push(article);
+        }
+      });
+      
+      console.log('📊 Ranked article IDs:', rankedIds);
+      return sortedArticles;
+      
+    } catch (error) {
+      console.error('Error calling OpenRouter API:', error);
+      // Return original order if AI fails
+      return articles;
+    }
+  }
+
+  // Render sorted articles in the UI
+  renderSortedArticles(articles) {
+    const container = document.querySelector('section.rounded-xl.border.bg-white.shadow-sm .grid.grid-cols-1.gap-3.p-5');
+    if (!container) {
+      console.warn('Articles container not found');
+      return;
+    }
+
+    container.innerHTML = articles.map(article => `
+      <a href="${article.url}"
+        class="flex items-start gap-3 rounded-lg border p-4 hover:border-blue-400 hover:bg-blue-50">
+        <div class="mt-0.5">
+          <svg class="h-5 w-5 ${article.iconColor}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${article.icon}" />
+          </svg>
+        </div>
+        <div>
+          <div class="text-sm font-semibold text-gray-900">${article.title}</div>
+          <div class="text-xs text-gray-600">${article.subtitle}</div>
+        </div>
+      </a>
+    `).join('');
   }
 }
 

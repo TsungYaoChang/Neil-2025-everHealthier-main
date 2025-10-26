@@ -344,33 +344,38 @@ const Chart = {
     const container = document.getElementById(containerId);
     if (!container) return;
 
+    const size = options.size || 120;
+    const center = size / 2;
+    const radius = (size / 2) - 10;
+    const strokeWidth = 8;
+
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     const circle1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const circle2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
 
-    svg.setAttribute('width', '120');
-    svg.setAttribute('height', '120');
+    svg.setAttribute('width', size.toString());
+    svg.setAttribute('height', size.toString());
 
-    circle1.setAttribute('cx', '60');
-    circle1.setAttribute('cy', '60');
-    circle1.setAttribute('r', '50');
+    circle1.setAttribute('cx', center.toString());
+    circle1.setAttribute('cy', center.toString());
+    circle1.setAttribute('r', radius.toString());
     circle1.setAttribute('fill', 'none');
     circle1.setAttribute('stroke', '#E5E7EB');
-    circle1.setAttribute('stroke-width', '8');
+    circle1.setAttribute('stroke-width', strokeWidth.toString());
 
-    circle2.setAttribute('cx', '60');
-    circle2.setAttribute('cy', '60');
-    circle2.setAttribute('r', '50');
+    circle2.setAttribute('cx', center.toString());
+    circle2.setAttribute('cy', center.toString());
+    circle2.setAttribute('r', radius.toString());
     circle2.setAttribute('fill', 'none');
     circle2.setAttribute('stroke', options.color || '#10B981');
-    circle2.setAttribute('stroke-width', '8');
+    circle2.setAttribute('stroke-width', strokeWidth.toString());
     circle2.setAttribute('stroke-linecap', 'round');
 
-    const circumference = 2 * Math.PI * 50;
+    const circumference = 2 * Math.PI * radius;
     const strokeDasharray = `${(Math.max(0, Math.min(100, percentage)) / 100) * circumference} ${circumference}`;
     circle2.setAttribute('stroke-dasharray', strokeDasharray);
     circle2.style.transform = 'rotate(-90deg)';
-    circle2.style.transformOrigin = '60px 60px';
+    circle2.style.transformOrigin = `${center}px ${center}px`;
 
     svg.appendChild(circle1);
     svg.appendChild(circle2);
@@ -383,7 +388,7 @@ const Chart = {
     text.textContent = `${Math.round(Math.max(0, Math.min(100, percentage)))}%`;
     text.style.cssText = `
       position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%); font-size: 1.5rem;
+      transform: translate(-50%, -50%); font-size: 16px;
       font-weight: 600; color: #374151;
     `;
     container.style.position = 'relative';
