@@ -59,6 +59,9 @@ class PatientDashboard {
     if (ENABLE_AI_SORTING) {
       await this.sortSuggestionArticles();
     }
+    
+    // Generate AI Insight for patient
+    this.generateAIInsight();
   }
   
   // Load medication data and count medications due and taken
@@ -3007,12 +3010,6 @@ class PatientDashboard {
       // Update UI with sorted articles
       this.renderSortedArticles(sortedArticles);
       
-      // Update title to show AI was used successfully
-      const titleEl = document.getElementById('suggestionTitle');
-      if (titleEl) {
-        titleEl.textContent = 'AI Suggestion';
-      }
-      
       console.log('✅ Articles sorted successfully with AI');
     } catch (error) {
       console.error('❌ Error sorting articles:', error);
@@ -3187,7 +3184,7 @@ class PatientDashboard {
   async rankArticlesWithAI(patientData, articles) {
     // Note: If you get 401 errors, the API key may have expired
     // Get a new key from: https://openrouter.ai/keys
-    const OPENROUTER_API_KEY = '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';
+    const OPENROUTER_API_KEY = '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';
 
     const prompt = `You are a healthcare AI assistant for post kidney transplant patients. 
                     Based on the following patient health data, 
@@ -3313,6 +3310,312 @@ Do not include any explanation, just the JSON array.`;
         </div>
       </a>
     `).join('');
+  }
+
+  // ============= AI Insight Functions =============
+
+  async generateAIInsight() {
+    const contentEl = document.getElementById('aiInsightContent');
+    
+    if (!contentEl) {
+      console.warn('AI Insight content element not found');
+      return;
+    }
+
+    // Show loading state
+    contentEl.innerHTML = `
+      <div class="flex items-center justify-center py-8 space-y-3 flex-col">
+        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
+        <p class="text-sm text-gray-600">Analyzing patient data with AI...</p>
+      </div>
+    `;
+
+    try {
+      // Gather all patient data
+      const patientData = await this.collectPatientData();
+      
+      // Build comprehensive AI prompt
+      const prompt = this.buildPatientAIPrompt(patientData);
+      
+      // Call OpenRouter API
+      const OPENROUTER_API_KEY = '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';
+      
+      console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
+      console.log('🌐 Calling OpenRouter API for patient insight');
+      
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': window.location.origin || 'http://localhost:3001',
+          'X-Title': 'everHealthier Patient Dashboard'
+        },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 800
+        })
+      });
+
+      console.log('📡 API Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        
+        if (response.status === 401) {
+          throw new Error('The API key token may have expired and needs to be updated. (401 Unauthorized)');
+        }
+        
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error?.message || errorJson.message || errorMessage;
+        } catch (e) {
+          errorMessage = errorText.substring(0, 200);
+        }
+        
+        throw new Error(`API request failed: ${errorMessage}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ API Response received:', data);
+      
+      const aiInsight = data.choices?.[0]?.message?.content?.trim();
+
+      if (!aiInsight) {
+        console.error('❌ No insight in response:', data);
+        throw new Error('No insight generated from AI');
+      }
+
+      console.log('🤖 AI Insight generated successfully');
+
+      // Display the AI insight with formatted output
+      contentEl.innerHTML = `
+        <div class="prose prose-sm max-w-none">
+          <div class="text-gray-800 leading-relaxed">${this.formatAIInsight(aiInsight)}</div>
+        </div>
+        <div class="mt-4 pt-4 border-t border-purple-200 flex items-center justify-between">
+          <div class="flex items-center space-x-2 text-xs text-gray-500">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span>Generated by Meta LLaMA 3.3 70B</span>
+          </div>
+          <span class="text-xs text-gray-500">${new Date().toLocaleString('en-AU')}</span>
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('❌ AI generation error:', error);
+      
+      contentEl.innerHTML = `
+        <div class="space-y-2">
+          <div class="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <svg class="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div class="flex-1">
+              <p class="text-sm font-medium text-red-800">Unable to generate AI insight</p>
+              <p class="text-xs text-red-600 mt-1">${error.message}</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  async collectPatientData() {
+    const patientId = this.getPatientId();
+    
+    // Collect patient information
+    const patientInfo = this.fhirData?.patient || {};
+    const name = patientInfo.name?.[0] 
+      ? `${patientInfo.name[0].given?.join(' ') || ''} ${patientInfo.name[0].family || ''}`.trim() 
+      : 'Unknown Patient';
+    
+    // Collect vital signs from dashboard
+    const vitals = {
+      bloodPressure: document.getElementById('vitals-bp')?.textContent || 'N/A',
+      weight: document.getElementById('vitals-weight')?.textContent || 'N/A',
+      temperature: document.getElementById('vitals-temp')?.textContent || 'N/A'
+    };
+    
+    // Collect medication adherence
+    const adherence = {
+      today: this.medicationsTaken || 0,
+      total: this.medicationsDue || 0,
+      percentage: this.medicationsDue > 0 ? ((this.medicationsTaken / this.medicationsDue) * 100).toFixed(0) : 0
+    };
+    
+    // Collect recent observations
+    const observations = this.fhirData?.observations || [];
+    
+    // Collect recent appointments
+    const appointments = this.fhirData?.appointments || [];
+    const upcomingAppointments = appointments.filter(apt => {
+      const aptDate = new Date(apt.start);
+      return aptDate > new Date();
+    }).slice(0, 3);
+    
+    return {
+      name,
+      id: patientId,
+      vitals,
+      adherence,
+      observations: observations.slice(0, 10),
+      upcomingAppointments
+    };
+  }
+
+  buildPatientAIPrompt(data) {
+    const prompt = `You are a helpful health assistant providing personalized advice to a kidney transplant patient.
+Based on the patient's data below, provide supportive recommendations and insights.
+
+**PATIENT INFORMATION:**
+- Name: ${data.name}
+- Patient ID: ${data.id}
+
+**CURRENT VITAL SIGNS:**
+- Blood Pressure: ${data.vitals.bloodPressure}
+- Weight: ${data.vitals.weight}
+- Temperature: ${data.vitals.temperature}
+
+**MEDICATION ADHERENCE TODAY:**
+- Taken: ${data.adherence.today} / ${data.adherence.total} doses
+- Adherence Rate: ${data.adherence.percentage}%
+
+**RECENT OBSERVATIONS:**
+${data.observations.length > 0 ? data.observations.map(obs => {
+  const value = obs.valueQuantity?.value || obs.valueString || 'N/A';
+  const unit = obs.valueQuantity?.unit || '';
+  const date = obs.effectiveDateTime ? new Date(obs.effectiveDateTime).toLocaleDateString('en-AU') : 'Unknown date';
+  const code = obs.code?.coding?.[0]?.display || obs.code?.text || 'Unknown';
+  return `- ${date}: ${code} = ${value} ${unit}`;
+}).join('\n') : '- No recent observations'}
+
+**UPCOMING APPOINTMENTS:**
+${data.upcomingAppointments.length > 0 ? data.upcomingAppointments.map(apt => {
+  const date = new Date(apt.start).toLocaleDateString('en-AU');
+  const type = apt.serviceType?.[0]?.coding?.[0]?.display || 'Appointment';
+  return `- ${date}: ${type}`;
+}).join('\n') : '- No upcoming appointments'}
+
+CRITICAL INSTRUCTIONS:
+You MUST structure your response EXACTLY as follows, using these exact section titles:
+
+Health Summary
+[Brief assessment of the patient's current health status in 2-3 sentences, written in a friendly, supportive tone]
+
+Important Notes
+[List any concerning trends or values that need attention as numbered points. Each point must have a BOLD subtitle followed by description:
+1. Medication Adherence: [Comment on adherence rate and importance]
+2. Vital Signs: [Comment on any abnormal vitals]
+etc.]
+
+Positive Progress
+[List improvements or stable parameters as numbered points. Each point must have a BOLD subtitle followed by description:
+1. Regular Monitoring: [Acknowledge patient's efforts in tracking health data]
+2. Stable Parameters: [Mention any stable or improving values]
+etc.]
+
+Your Action Items
+[List specific actions the patient should take as numbered points. Each point must have a BOLD subtitle followed by description:
+1. Daily Medications: [Reminder about medication importance]
+2. Monitor Symptoms: [What to watch for]
+3. Next Steps: [Any preparations for upcoming appointments]
+etc.]
+
+FORMATTING RULES:
+- Use ONLY the exact section titles shown above (no ### or ** or numbering)
+- Start each section title on a new line
+- Leave a blank line after each section title
+- Use numbered lists (1., 2., etc.) for items within sections
+- Be supportive, encouraging, and patient-friendly in tone
+- Focus on actionable advice the patient can follow`;
+
+    return prompt;
+  }
+
+  formatAIInsight(text) {
+    // Split text into lines for processing
+    let lines = text.split('\n');
+    let formatted = [];
+    
+    // Section titles to recognize (without any special characters)
+    const sectionTitles = [
+      'Health Summary',
+      'Important Notes',
+      'Positive Progress',
+      'Your Action Items'
+    ];
+    
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      
+      // Skip empty lines
+      if (!line) {
+        formatted.push('');
+        continue;
+      }
+      
+      // Check if this line is a section title
+      const isSectionTitle = sectionTitles.some(title => 
+        line === title || 
+        line.replace(/^#+\s*/, '').replace(/^\*\*/, '').replace(/\*\*$/, '') === title
+      );
+      
+      if (isSectionTitle) {
+        // Format as section header
+        const cleanTitle = line.replace(/^#+\s*/, '').replace(/^\*\*/, '').replace(/\*\*$/, '').trim();
+        formatted.push(`<div class="font-bold text-base text-gray-900 mb-2">${cleanTitle}</div>`);
+      }
+      // Check if it's a numbered list item (1., 2., etc.)
+      else if (/^\d+\./.test(line)) {
+        // Process line to bold text before first colon (the subtitle)
+        let processedLine = line;
+        
+        // Check if line contains a subtitle pattern (text before colon)
+        const colonIndex = line.indexOf(':');
+        if (colonIndex > 0) {
+          // Extract number, subtitle, and description
+          const numberMatch = line.match(/^(\d+\.\s*)/);
+          const number = numberMatch ? numberMatch[1] : '';
+          const restOfLine = line.substring(number.length);
+          
+          // Split at first colon
+          let subtitle = restOfLine.substring(0, restOfLine.indexOf(':'));
+          let description = restOfLine.substring(restOfLine.indexOf(':') + 1);
+          
+          // Remove ** markdown from subtitle and description
+          subtitle = subtitle.replace(/\*\*/g, '');
+          description = description.replace(/\*\*/g, '');
+          
+          processedLine = `${number}<strong>${subtitle}</strong>:${description}`;
+        }
+        
+        formatted.push(`<div class="text-sm ml-4 mb-2">${processedLine}</div>`);
+      }
+      // Check if it's a bullet point
+      else if (/^[-•]/.test(line)) {
+        formatted.push(`<div class="text-sm ml-4 mb-1">${line.replace(/^[-•]\s*/, '• ')}</div>`);
+      }
+      // Regular paragraph
+      else {
+        // Bold any remaining **text**
+        line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        formatted.push(`<div class="text-sm ml-4 mb-2">${line}</div>`);
+      }
+    }
+    
+    return formatted.join('');
   }
 }
 
