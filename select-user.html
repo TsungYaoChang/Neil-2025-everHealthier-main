@@ -36,12 +36,8 @@
   <header class="bg-white shadow-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
       <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-lg gradient-bg flex items-center justify-center">
-          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z">
-            </path>
-          </svg>
+        <div class="w-14 h-11 rounded-lg flex items-center justify-center">
+          <img src="assets/everHealthier.png" alt="everHealthier Logo" class="h-12">
         </div>
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Ever Healthier</h1>
@@ -309,30 +305,89 @@
         let resources = [];
         
         if (selectedRole === 'practitioner') {
-          // Search practitioners from HAPI FHIR
-          let query = 'https://hapi.fhir.org/baseR4/Practitioner?_count=50';
+          // Step 1: Find all patients with Kidney Transplant condition (SNOMED: 70536003)
+          console.log('🔍 Step 1: Searching for Kidney Transplant patients...');
+          let patientsQuery = 'https://hapi.fhir.org/baseR4/Patient?_has:Condition:subject:code=http://snomed.info/sct|70536003&_count=100';
           
-          if (searchTerm) {
-            const terms = searchTerm.trim().split(/\s+/);
-            if (terms.length === 1) {
-              // Single term: search in family name
-              query += `&name=${encodeURIComponent(terms[0])}`;
-            } else if (terms.length >= 2) {
-              // Multiple terms: first as given, last as family
-              query += `&given=${encodeURIComponent(terms[0])}&family=${encodeURIComponent(terms[terms.length - 1])}`;
-            }
-          }
-          
+          let kidneyTransplantPatients = [];
           try {
-            const response = await fetch(query);
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const bundle = await response.json();
-            if (bundle && bundle.entry) {
-              resources = bundle.entry.map(e => e.resource).filter(r => r.resourceType === 'Practitioner');
+            const patientsResponse = await fetch(patientsQuery);
+            if (patientsResponse.ok) {
+              const patientsBundle = await patientsResponse.json();
+              if (patientsBundle && patientsBundle.entry) {
+                kidneyTransplantPatients = patientsBundle.entry.map(e => e.resource).filter(r => r.resourceType === 'Patient');
+                console.log(`✅ Found ${kidneyTransplantPatients.length} Kidney Transplant patients`);
+              }
             }
           } catch (e) {
-            console.error('Failed to search practitioners from HAPI FHIR:', e);
+            console.error('Failed to search Kidney Transplant patients:', e);
+            // Fallback: try without condition filter
+            try {
+              const fallbackResponse = await fetch('https://hapi.fhir.org/baseR4/Patient?_count=100');
+              if (fallbackResponse.ok) {
+                const fallbackBundle = await fallbackResponse.json();
+                if (fallbackBundle && fallbackBundle.entry) {
+                  kidneyTransplantPatients = fallbackBundle.entry.map(e => e.resource).filter(r => r.resourceType === 'Patient');
+                  console.log(`⚠️ Fallback: Found ${kidneyTransplantPatients.length} patients (without condition filter)`);
+                }
+              }
+            } catch (fallbackError) {
+              console.error('Fallback patient search also failed:', fallbackError);
+            }
           }
+          
+          // Step 2: Extract generalPractitioner references from these patients
+          console.log('🔍 Step 2: Extracting generalPractitioner references...');
+          const practitionerIds = new Set();
+          const practitionerReferences = new Map(); // Store full reference for later use
+          
+          kidneyTransplantPatients.forEach(patient => {
+            if (patient.generalPractitioner && Array.isArray(patient.generalPractitioner)) {
+              patient.generalPractitioner.forEach(gp => {
+                if (gp.reference) {
+                  // Extract Practitioner ID from reference (e.g., "Practitioner/123" -> "123")
+                  const match = gp.reference.match(/Practitioner\/(.+)/);
+                  if (match) {
+                    const practitionerId = match[1];
+                    practitionerIds.add(practitionerId);
+                    practitionerReferences.set(practitionerId, gp);
+                  }
+                }
+              });
+            }
+          });
+          
+          console.log(`✅ Found ${practitionerIds.size} unique practitioners`);
+          
+          // Step 3: Fetch practitioner details
+          console.log('🔍 Step 3: Fetching practitioner details...');
+          const practitionerPromises = Array.from(practitionerIds).map(async (id) => {
+            try {
+              const response = await fetch(`https://hapi.fhir.org/baseR4/Practitioner/${id}`);
+              if (response.ok) {
+                return await response.json();
+              }
+            } catch (e) {
+              console.error(`Failed to fetch Practitioner/${id}:`, e);
+            }
+            return null;
+          });
+          
+          const practitioners = (await Promise.all(practitionerPromises)).filter(p => p !== null);
+          console.log(`✅ Successfully fetched ${practitioners.length} practitioner details`);
+          
+          // Step 4: Filter by search term if provided
+          if (searchTerm) {
+            const lowerSearchTerm = searchTerm.toLowerCase();
+            resources = practitioners.filter(p => {
+              const name = formatName(p).toLowerCase();
+              return name.includes(lowerSearchTerm);
+            });
+            console.log(`🔍 Filtered to ${resources.length} practitioners matching "${searchTerm}"`);
+          } else {
+            resources = practitioners;
+          }
+          
         } else {
           // Search patients from HAPI FHIR (your kidney transplant patient data)
           let query = 'https://hapi.fhir.org/baseR4/Patient?_count=50';

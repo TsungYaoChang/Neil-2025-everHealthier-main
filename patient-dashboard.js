@@ -495,7 +495,18 @@ class PatientDashboard {
     // Display patient name instead of ID
     set('ppName', p.name || 'Unknown Patient');
     set('ppGender', p.gender);
-    set('ppBirthDate', p.birthDate);
+    
+    // Format birth date as "MMM DD\nYYYY"
+    const birthDateEl = document.getElementById('ppBirthDate');
+    if (birthDateEl && p.birthDate) {
+      const date = new Date(p.birthDate);
+      const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const year = date.getFullYear();
+      birthDateEl.innerHTML = `${monthDay}<br>${year}`;
+    } else if (birthDateEl) {
+      birthDateEl.textContent = '-';
+    }
+    
     set('ppAge', p.age);
     
     // Display conditions with dates
@@ -1378,7 +1389,22 @@ class PatientDashboard {
       
       form.reset();
       
-      // Refresh calendar to show updated data
+      // Wait a moment for HAPI FHIR to process the data before refreshing calendar
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // If the saved date is not in the current viewing month, switch to that month
+      const savedDate = new Date(recordDate);
+      const currentViewYear = this.viewDate.getFullYear();
+      const currentViewMonth = this.viewDate.getMonth();
+      const savedYear = savedDate.getFullYear();
+      const savedMonth = savedDate.getMonth();
+      
+      if (savedYear !== currentViewYear || savedMonth !== currentViewMonth) {
+        // Switch to the month of the saved date
+        this.viewDate = new Date(savedYear, savedMonth, 1);
+      }
+      
+      // Refresh calendar to show updated data with new icons
       await this.renderCalendar();
       
       // Refresh sections based on what was saved
@@ -2388,11 +2414,15 @@ class PatientDashboard {
     }
     
     const message = comm.payload?.[0]?.contentString || 'No message';
+    const status = comm.status || 'unknown';
+    
+    // Format: first line is message, second line is status
+    const textWithStatus = `${message}\nStatus: ${status}`;
     
     return { 
       category: 'sideEffects', 
       time: time,
-      text: message,  // Remove "Side Effects/Notes:" prefix
+      text: textWithStatus,
       lastUpdated
     };
   }
@@ -2737,7 +2767,10 @@ class PatientDashboard {
       status.className = 'flex items-center justify-center pt-2';
       
       if (items.length > 0) {
-        if (this.hasRequiredEntries(items)) {
+        const hasRequired = this.hasRequiredEntries(items);
+        console.log(`📅 Date ${key}: ${items.length} items, hasRequired: ${hasRequired}`, items);
+        
+        if (hasRequired) {
           // all required entries are present - show checkmark
           status.innerHTML = `
             <svg class="h-6 w-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2745,7 +2778,7 @@ class PatientDashboard {
             </svg>
           `;
         } else {
-          // some records - show partial completion circle
+          // some records but not complete - show yellow circle with exclamation mark
           status.innerHTML = `
             <svg class="h-6 w-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -3154,7 +3187,7 @@ class PatientDashboard {
   async rankArticlesWithAI(patientData, articles) {
     // Note: If you get 401 errors, the API key may have expired
     // Get a new key from: https://openrouter.ai/keys
-    const OPENROUTER_API_KEY = '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';
+    const OPENROUTER_API_KEY = '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';
 
     const prompt = `You are a healthcare AI assistant for post kidney transplant patients. 
                     Based on the following patient health data, 
@@ -3221,6 +3254,12 @@ Do not include any explanation, just the JSON array.`;
       if (!response.ok) {
         const errorBody = await response.text();
         console.error('❌ API Error Body:', errorBody);
+        
+        // Check for 401 Unauthorized error (API key issue)
+        if (response.status === 401) {
+          throw new Error('The API key token may have expired and needs to be updated. (401 Unauthorized)');
+        }
+        
         throw new Error(`OpenRouter API error: ${response.status} - ${errorBody}`);
       }
 

@@ -351,7 +351,31 @@ class ClinicianDashboard {
         this.renderRenalTrendsTab();
       });
     });
+
+    // Risk Info Modal Event Listeners
+    const riskInfoModal = document.getElementById('riskInfoModal');
+    const closeRiskModal = document.getElementById('closeRiskModal');
+    
+    // Open modal when clicking any risk info button
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.riskInfoBtn')) {
+        riskInfoModal?.classList.remove('hidden');
+      }
+    });
+    
+    // Close modal when clicking close button
+    closeRiskModal?.addEventListener('click', () => {
+      riskInfoModal?.classList.add('hidden');
+    });
+    
+    // Close modal when clicking outside
+    riskInfoModal?.addEventListener('click', (e) => {
+      if (e.target === riskInfoModal) {
+        riskInfoModal.classList.add('hidden');
+      }
+    });
   }
+
 
   /**
    * Load current user data and update UI
@@ -580,12 +604,17 @@ class ClinicianDashboard {
     try {
       const patientId = fhirPatient.id;
       
-      // Fetch all related data in parallel
-      const [observations, medicationRequests, appointments, conditions] = await Promise.all([
+      // Get current practitioner ID from user data
+      const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
+      const practitionerId = userData.fhir?.practitionerId || null;
+      
+      // Fetch all related data in parallel (including communications)
+      const [observations, medicationRequests, appointments, conditions, communications] = await Promise.all([
         this.fetchObservations(patientId),
         this.fetchMedicationRequests(patientId),
         this.fetchAppointments(patientId),
-        this.fetchConditions(patientId)
+        this.fetchConditions(patientId),
+        this.fetchCommunications(patientId)
       ]);
       
       // Calculate age from birthDate
@@ -599,9 +628,6 @@ class ClinicianDashboard {
       
       // Process observations to extract key metrics
       const processedObservations = this.processObservations(observations);
-      
-      // Calculate risk level based on observations
-      const riskLevel = this.calculateRiskLevel(processedObservations);
       
       // Calculate adherence from medication requests and administrations
       const adherenceData = await this.calculateAdherence(patientId, medicationRequests);
@@ -627,13 +653,13 @@ class ClinicianDashboard {
       // Get kidney transplant date from conditions
       const transplantDate = this.getTransplantDate(conditions);
       
-      return {
+      // Build patient data object first (for comprehensive risk calculation)
+      const patientData = {
         id: patientId,
         fhirId: patientId,
         name: name,
         age: age,
         gender: gender,
-        riskLevel: riskLevel,
         adherence: adherence,
         adherenceYesterday: adherenceYesterday,
         adherence7Days: adherence7Days,
@@ -659,10 +685,29 @@ class ClinicianDashboard {
         bpData: this.processBPObservations(observations),
         weightData: this.processWeightObservations(observations),
         
-        clinicalEvents: this.extractClinicalEvents(observations, appointments),
+        clinicalEvents: this.extractClinicalEvents(observations, appointments, communications, practitionerId),
         symptoms: this.extractSymptoms(observations),
-        medications: this.extractMedications(medicationRequests)
+        medications: this.extractMedications(medicationRequests),
+        
+        // Filter pending communications (status !== 'completed')
+        pendingCommunications: (communications || []).filter(comm => 
+          comm.status && comm.status !== 'completed'
+        ).map(comm => ({
+          id: comm.id,
+          sent: comm.sent,
+          status: comm.status,
+          message: comm.payload?.[0]?.contentString || 'No message',
+          fullResource: comm  // Keep full resource for updates
+        }))
       };
+      
+      console.log(`📧 Patient ${name} has ${patientData.pendingCommunications.length} pending communications`);
+      
+      // Calculate comprehensive risk level using all patient data
+      const riskLevel = this.calculateRiskLevel(processedObservations, patientData);
+      patientData.riskLevel = riskLevel;
+      
+      return patientData;
     } catch (error) {
       console.error(`Error processing patient ${fhirPatient.id}:`, error);
       return null;
@@ -858,6 +903,47 @@ class ClinicianDashboard {
     return [];
   }
 
+  async fetchCommunications(patientId) {
+    const maxRetries = 3;
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const url = `${HAPI_FHIR_BASE}/Communication?subject=Patient/${patientId}&_count=100`;
+        console.log(`📨 Fetching communications for patient ${patientId} (attempt ${attempt}/${maxRetries})`);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          console.warn(`⚠️ Failed to fetch communications (status ${response.status})`);
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+          // If all retries failed, return empty array instead of throwing
+          console.log(`ℹ️ No communications found for patient ${patientId}, returning empty array`);
+          return [];
+        }
+        
+        const bundle = await response.json();
+        const communications = bundle.entry ? bundle.entry.map(e => e.resource) : [];
+        console.log(`✅ Fetched ${communications.length} communications for patient ${patientId}`);
+        return communications;
+      } catch (error) {
+        lastError = error;
+        console.warn(`⚠️ Error fetching communications (attempt ${attempt}/${maxRetries}):`, error.message);
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+    }
+    
+    // After all retries failed, log and return empty array (don't throw)
+    console.log(`ℹ️ Could not fetch communications for patient ${patientId} after ${maxRetries} attempts, returning empty array`);
+    return [];
+  }
+
   /**
    * Extract patient name from FHIR Patient resource
    * @param {Object} fhirPatient - FHIR Patient resource
@@ -1009,12 +1095,19 @@ class ClinicianDashboard {
   }
 
   /**
-   * Calculate patient risk level based on clinical observations
+   * Calculate patient risk level based on comprehensive clinical data
+   * Uses all Patient Overview data including charts, trends, adherence, etc.
    * @param {Object} processedObservations - Processed observation data
+   * @param {Object} patientData - Full patient data (optional, for enhanced risk assessment)
    * @returns {string} Risk level: 'high', 'medium', or 'normal'
    */
-  calculateRiskLevel(processedObservations) {
-    // Simple risk calculation based on eGFR and creatinine
+  calculateRiskLevel(processedObservations, patientData = null) {
+    // If full patient data is available, use comprehensive risk assessment
+    if (patientData) {
+      return this.calculateComprehensiveRisk(patientData);
+    }
+    
+    // Fallback: Simple risk calculation based on eGFR and creatinine
     const eGFR = processedObservations.eGFR;
     const creatinine = processedObservations.creatinine;
     
@@ -1024,6 +1117,320 @@ class ClinicianDashboard {
     if (creatinine && creatinine > 1.5) return 'medium';
     
     return 'normal';
+  }
+
+  /**
+   * Comprehensive risk assessment using all Patient Overview data
+   * @param {Object} patientData - Complete patient data including observations, adherence, trends
+   * @returns {string} Risk level: 'high', 'medium', or 'normal'
+   */
+  calculateComprehensiveRisk(patientData) {
+    let riskScore = 0; // Points system: higher = more risk
+    const riskFactors = [];
+    
+    // === 1. RENAL FUNCTION (Most Critical) ===
+    const observations = patientData.observations || [];
+    
+    // Get latest eGFR
+    const eGFRobs = observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '98979-8')
+      .sort((a, b) => new Date(b.effectiveDateTime || 0) - new Date(a.effectiveDateTime || 0))[0];
+    const eGFR = eGFRobs?.valueQuantity?.value;
+    
+    // Get latest Creatinine
+    const crObs = observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '2160-0')
+      .sort((a, b) => new Date(b.effectiveDateTime || 0) - new Date(a.effectiveDateTime || 0))[0];
+    const creatinine = crObs?.valueQuantity?.value;
+    
+    // eGFR scoring (highest priority)
+    if (eGFR) {
+      if (eGFR < 30) {
+        riskScore += 10; // Severe kidney dysfunction (Stage 4-5 CKD)
+        riskFactors.push(`Severe kidney dysfunction (eGFR: ${eGFR.toFixed(1)} mL/min/1.73m²)`);
+      } else if (eGFR < 45) {
+        riskScore += 6; // Moderate-severe dysfunction (Stage 3b)
+        riskFactors.push(`Moderate-severe kidney dysfunction (eGFR: ${eGFR.toFixed(1)} mL/min/1.73m²)`);
+      } else if (eGFR < 60) {
+        riskScore += 3; // Moderate dysfunction (Stage 3a)
+        riskFactors.push(`Moderate kidney dysfunction (eGFR: ${eGFR.toFixed(1)} mL/min/1.73m²)`);
+      }
+    }
+    
+    // Creatinine scoring
+    if (creatinine) {
+      if (creatinine > 2.5) {
+        riskScore += 8;
+        riskFactors.push(`Very high creatinine (${creatinine.toFixed(2)} mg/dL)`);
+      } else if (creatinine > 2.0) {
+        riskScore += 5;
+        riskFactors.push(`High creatinine (${creatinine.toFixed(2)} mg/dL)`);
+      } else if (creatinine > 1.5) {
+        riskScore += 2;
+        riskFactors.push(`Elevated creatinine (${creatinine.toFixed(2)} mg/dL)`);
+      }
+    }
+    
+    // === 2. RENAL FUNCTION TREND (90 days) ===
+    const eGFRtrend = this.analyzeEGFRTrend(observations);
+    if (eGFRtrend.declining && eGFRtrend.change < -10) {
+      riskScore += 5;
+      riskFactors.push(`Declining kidney function (eGFR decreased by ${Math.abs(eGFRtrend.change).toFixed(1)} mL/min)`);
+    } else if (eGFRtrend.declining && eGFRtrend.change < -5) {
+      riskScore += 2;
+      riskFactors.push(`Slowly declining kidney function (eGFR decreased by ${Math.abs(eGFRtrend.change).toFixed(1)} mL/min)`);
+    }
+    
+    // === 3. IMMUNOSUPPRESSANT LEVELS ===
+    const tacObs = observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '11253-2')
+      .sort((a, b) => new Date(b.effectiveDateTime || 0) - new Date(a.effectiveDateTime || 0))[0];
+    
+    if (tacObs) {
+      const tacValue = tacObs.valueQuantity?.value;
+      const transplantDate = patientData.transplantDate;
+      const target = this.getTacrolimusTargetRange(transplantDate);
+      
+      if (tacValue) {
+        if (tacValue < target.targetMin) {
+          riskScore += 6; // Risk of rejection
+          riskFactors.push(`Tacrolimus below target (${tacValue.toFixed(1)} ng/mL, target: ${target.targetMin}-${target.targetMax})`);
+        } else if (tacValue > target.targetMax) {
+          riskScore += 4; // Risk of toxicity
+          riskFactors.push(`Tacrolimus above target (${tacValue.toFixed(1)} ng/mL, target: ${target.targetMin}-${target.targetMax})`);
+        }
+      }
+    }
+    
+    // === 4. INFLAMMATORY MARKERS ===
+    // CRP (C-Reactive Protein)
+    const crpObs = observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '1988-5')
+      .sort((a, b) => new Date(b.effectiveDateTime || 0) - new Date(a.effectiveDateTime || 0))[0];
+    const crp = crpObs?.valueQuantity?.value;
+    
+    if (crp) {
+      if (crp > 10) {
+        riskScore += 4;
+        riskFactors.push(`High inflammation (CRP: ${crp.toFixed(1)} mg/L)`);
+      } else if (crp > 5) {
+        riskScore += 2;
+        riskFactors.push(`Elevated inflammation (CRP: ${crp.toFixed(1)} mg/L)`);
+      }
+    }
+    
+    // WBC (White Blood Cell)
+    const wbcObs = observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '6690-2')
+      .sort((a, b) => new Date(b.effectiveDateTime || 0) - new Date(a.effectiveDateTime || 0))[0];
+    const wbc = wbcObs?.valueQuantity?.value;
+    
+    if (wbc) {
+      // WBC normal range: 4.0-11.0 (×10³/μL) or 4000-11000 (cells/μL)
+      // Check if value is in thousands (×10³/μL) or actual cell count
+      const wbcValue = wbc < 100 ? wbc * 1000 : wbc; // Convert to cells/μL if needed
+      
+      console.log(`📊 WBC check: original=${wbc}, converted=${wbcValue} cells/μL`);
+      
+      if (wbcValue < 3000) {
+        riskScore += 3;
+        const displayValue = wbc < 100 ? wbc.toFixed(1) : wbc.toFixed(0);
+        const unit = wbc < 100 ? '×10³/μL' : 'cells/μL';
+        riskFactors.push(`Leukopenia (WBC: ${displayValue} ${unit})`);
+      } else if (wbcValue > 12000) {
+        riskScore += 3;
+        const displayValue = wbc < 100 ? wbc.toFixed(1) : wbc.toFixed(0);
+        const unit = wbc < 100 ? '×10³/μL' : 'cells/μL';
+        riskFactors.push(`Leukocytosis (WBC: ${displayValue} ${unit})`);
+      } else {
+        console.log(`  ✅ WBC in normal range (4000-11000 cells/μL)`);
+      }
+    }
+    
+    // === 5. MEDICATION ADHERENCE ===
+    const adherence7Days = patientData.adherence7Days || patientData.adherence || 0;
+    
+    if (adherence7Days < 60) {
+      riskScore += 7; // Poor adherence - major concern
+      riskFactors.push(`Poor medication adherence (${adherence7Days.toFixed(0)}%)`);
+    } else if (adherence7Days < 80) {
+      riskScore += 3; // Suboptimal adherence
+      riskFactors.push(`Suboptimal medication adherence (${adherence7Days.toFixed(0)}%)`);
+    }
+    
+    // === 6. BLOOD PRESSURE (14 days self-reported) ===
+    const bpData = this.getRecentBPData(observations, 14);
+    if (bpData.length > 0) {
+      const avgSystolic = bpData.reduce((sum, bp) => sum + bp.systolic, 0) / bpData.length;
+      const avgDiastolic = bpData.reduce((sum, bp) => sum + bp.diastolic, 0) / bpData.length;
+      
+      if (avgSystolic >= 160 || avgDiastolic >= 100) {
+        riskScore += 4;
+        riskFactors.push(`Severe hypertension (avg BP: ${avgSystolic.toFixed(0)}/${avgDiastolic.toFixed(0)} mmHg)`);
+      } else if (avgSystolic >= 140 || avgDiastolic >= 90) {
+        riskScore += 2;
+        riskFactors.push(`Hypertension (avg BP: ${avgSystolic.toFixed(0)}/${avgDiastolic.toFixed(0)} mmHg)`);
+      }
+    }
+    
+    // === 7. WEIGHT CHANGE (14 days) ===
+    const weightTrend = this.analyzeWeightTrend(observations, 14);
+    if (weightTrend.change > 0) {
+      if (weightTrend.change > 3) {
+        riskScore += 3;
+        riskFactors.push(`Rapid weight gain (+${weightTrend.change.toFixed(1)} kg in 14 days)`);
+      } else if (weightTrend.change > 2) {
+        riskScore += 1;
+        riskFactors.push(`Weight gain (+${weightTrend.change.toFixed(1)} kg in 14 days)`);
+      }
+    }
+    
+    // === 8. PROTEINURIA ===
+    const proteinObs = observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '2889-4')
+      .sort((a, b) => new Date(b.effectiveDateTime || 0) - new Date(a.effectiveDateTime || 0))[0];
+    const protein24h = proteinObs?.valueQuantity?.value;
+    
+    if (protein24h) {
+      if (protein24h > 1000) {
+        riskScore += 5;
+        riskFactors.push(`High proteinuria (${protein24h.toFixed(0)} mg/24h)`);
+      } else if (protein24h > 500) {
+        riskScore += 2;
+        riskFactors.push(`Elevated proteinuria (${protein24h.toFixed(0)} mg/24h)`);
+      }
+    }
+    
+    // === 9. RECENT CLINICAL EVENTS ===
+    const conditions = patientData.conditions || [];
+    const recentConditions = conditions.filter(c => {
+      const recordedDate = new Date(c.recordedDate || c.onsetDateTime || 0);
+      const daysSince = (new Date() - recordedDate) / (1000 * 60 * 60 * 24);
+      return daysSince <= 30;
+    });
+    
+    if (recentConditions.length > 0) {
+      const hasRejection = recentConditions.some(c => 
+        c.code?.text?.toLowerCase().includes('rejection') ||
+        c.code?.coding?.[0]?.display?.toLowerCase().includes('rejection')
+      );
+      
+      const hasInfection = recentConditions.some(c => 
+        c.code?.text?.toLowerCase().includes('infection') ||
+        c.code?.coding?.[0]?.display?.toLowerCase().includes('infection')
+      );
+      
+      if (hasRejection) {
+        riskScore += 8;
+        riskFactors.push('Recent rejection episode');
+      }
+      
+      if (hasInfection) {
+        riskScore += 4;
+        riskFactors.push('Recent infection');
+      }
+    }
+    
+    // === RISK LEVEL DETERMINATION ===
+    // Log risk assessment
+    console.log(`🩺 Risk Assessment for ${patientData.name || 'Patient'}:`);
+    console.log(`   Total Risk Score: ${riskScore}`);
+    console.log(`   Risk Factors (${riskFactors.length}):`);
+    riskFactors.forEach(factor => console.log(`   - ${factor}`));
+    
+    // Determine final risk level based on total score
+    if (riskScore >= 10) {
+      console.log(`   ⚠️ FINAL RISK: HIGH`);
+      return 'high';
+    } else if (riskScore >= 4) {
+      console.log(`   ⚠️ FINAL RISK: MEDIUM`);
+      return 'medium';
+    } else {
+      console.log(`   ✅ FINAL RISK: NORMAL`);
+      return 'normal';
+    }
+  }
+
+  /**
+   * Analyze eGFR trend over 90 days
+   * @param {Array} observations - Patient observations
+   * @returns {Object} Trend analysis with change and direction
+   */
+  analyzeEGFRTrend(observations) {
+    const eGFRobs = observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '98979-8')
+      .map(obs => ({
+        value: obs.valueQuantity?.value,
+        date: new Date(obs.effectiveDateTime || 0)
+      }))
+      .filter(obs => obs.value && obs.date)
+      .sort((a, b) => b.date - a.date);
+    
+    if (eGFRobs.length < 2) {
+      return { declining: false, change: 0 };
+    }
+    
+    const latest = eGFRobs[0].value;
+    const oldest = eGFRobs[eGFRobs.length - 1].value;
+    const change = latest - oldest;
+    
+    return {
+      declining: change < 0,
+      change: change
+    };
+  }
+
+  /**
+   * Get recent BP data for trend analysis
+   * @param {Array} observations - Patient observations
+   * @param {number} days - Number of days to look back
+   * @returns {Array} BP data points
+   */
+  getRecentBPData(observations, days) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    
+    return observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '85354-9')
+      .filter(obs => new Date(obs.effectiveDateTime || 0) >= cutoffDate)
+      .map(obs => {
+        const systolic = obs.component?.find(c => c.code?.coding?.[0]?.code === '8480-6')?.valueQuantity?.value;
+        const diastolic = obs.component?.find(c => c.code?.coding?.[0]?.code === '8462-4')?.valueQuantity?.value;
+        return systolic && diastolic ? { systolic, diastolic } : null;
+      })
+      .filter(Boolean);
+  }
+
+  /**
+   * Analyze weight trend over specified days
+   * @param {Array} observations - Patient observations
+   * @param {number} days - Number of days to look back
+   * @returns {Object} Weight change analysis
+   */
+  analyzeWeightTrend(observations, days) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    
+    const weightObs = observations
+      .filter(obs => obs.code?.coding?.[0]?.code === '29463-7')
+      .filter(obs => new Date(obs.effectiveDateTime || 0) >= cutoffDate)
+      .map(obs => ({
+        value: obs.valueQuantity?.value,
+        date: new Date(obs.effectiveDateTime || 0)
+      }))
+      .filter(obs => obs.value)
+      .sort((a, b) => b.date - a.date);
+    
+    if (weightObs.length < 2) {
+      return { change: 0 };
+    }
+    
+    const latest = weightObs[0].value;
+    const oldest = weightObs[weightObs.length - 1].value;
+    
+    return {
+      change: latest - oldest
+    };
   }
 
   /**
@@ -1062,14 +1469,38 @@ class ClinicianDashboard {
       
       // Count total medication timings that should be taken (from MedicationRequest)
       let totalTimings = 0;
+      console.log(`📊 Calculating totalTimings for ${latestRequests.length} medication requests:`);
+      
       latestRequests.forEach(mr => {
         const dosageInstructions = mr.dosageInstruction || [];
+        let medicationTimings = 0;
+        
         dosageInstructions.forEach(dosage => {
           const whenCodes = dosage.timing?.repeat?.when || [];
           const timings = whenCodes.length > 0 ? whenCodes : ['UNSPECIFIED'];
-          totalTimings += timings.length;
+          medicationTimings += timings.length;
         });
+        
+        // Each MedicationRequest represents one medication
+        // We should count the UNIQUE timing codes for this medication, not multiply
+        const uniqueTimings = new Set();
+        dosageInstructions.forEach(dosage => {
+          const whenCodes = dosage.timing?.repeat?.when || [];
+          if (whenCodes.length > 0) {
+            whenCodes.forEach(code => uniqueTimings.add(code));
+          } else {
+            uniqueTimings.add('UNSPECIFIED');
+          }
+        });
+        
+        const medicationTimingCount = uniqueTimings.size;
+        totalTimings += medicationTimingCount;
+        
+        const medName = mr.medicationCodeableConcept?.text || mr.medicationCodeableConcept?.coding?.[0]?.display || 'Unknown';
+        console.log(`  - ${medName}: ${medicationTimingCount} timing(s) per day (${Array.from(uniqueTimings).join(', ')})`);
       });
+      
+      console.log(`✅ Total expected timings per day: ${totalTimings}`);
       
       if (totalTimings === 0) {
         return {
@@ -1078,9 +1509,20 @@ class ClinicianDashboard {
         };
       }
       
-      // Fetch MedicationAdministrations for the last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // Calculate date range for the last 7 days (using local timezone)
+      const today = new Date();
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 7);
+      
+      // Format dates as YYYY-MM-DD in local timezone
+      const formatLocalDate = (date) => {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      };
+      
+      const todayStr = formatLocalDate(today);
+      const sevenDaysAgoStr = formatLocalDate(sevenDaysAgo);
+      
+      console.log(`📅 Date range for 7-day adherence: ${sevenDaysAgoStr} to ${todayStr}`);
       
       const adminUrl = `${HAPI_FHIR_BASE}/MedicationAdministration?subject=Patient/${patientId}&_count=1000`;
       
@@ -1129,21 +1571,29 @@ class ClinicianDashboard {
       const adminBundle = await adminResp.json();
       const administrations = adminBundle.entry ? adminBundle.entry.map(e => e.resource) : [];
       
-      // Filter to last 7 days
+      console.log(`📦 Total MedicationAdministrations found: ${administrations.length}`);
+      
+      // Filter to last 7 days using date string comparison
       const recentAdministrations = administrations.filter(ma => {
         if (!ma.effectiveDateTime) return false;
-        const adminDate = new Date(ma.effectiveDateTime);
-        return adminDate >= sevenDaysAgo;
+        const adminDateStr = ma.effectiveDateTime.split('T')[0]; // YYYY-MM-DD
+        return adminDateStr >= sevenDaysAgoStr && adminDateStr <= todayStr;
       });
+      
+      console.log(`📦 Recent administrations (last 7 days, ${sevenDaysAgoStr} to ${todayStr}): ${recentAdministrations.length}`);
       
       // Group administrations by date and create composite keys
       const administrationsByDate = new Map();
       const administrationsYesterday = new Map();
       
-      // Get yesterday's date
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      // Get yesterday's date in local timezone
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const yesterdayStr = formatLocalDate(yesterday);
+      
+      console.log(`📅 Today's date (local): ${todayStr}`);
+      console.log(`📅 Yesterday's date (local): ${yesterdayStr}`);
+      console.log(`📋 Processing ${recentAdministrations.length} recent administrations:`);
       
       recentAdministrations.forEach(ma => {
         const adminDate = ma.effectiveDateTime.split('T')[0]; // YYYY-MM-DD
@@ -1168,7 +1618,12 @@ class ClinicianDashboard {
           if (adminDate === yesterdayStr) {
             const yesterdayKey = `${medRequestId}-${timingCode}`;
             administrationsYesterday.set(yesterdayKey, true);
+            console.log(`  ✅ Yesterday: ${adminDate} - MedRequest ${medRequestId} - Timing: ${timingCode}`);
+          } else {
+            console.log(`  📅 ${adminDate} - MedRequest ${medRequestId} - Timing: ${timingCode}`);
           }
+        } else {
+          console.log(`  ⚠️ No request reference in administration:`, ma);
         }
       });
       
@@ -1180,9 +1635,16 @@ class ClinicianDashboard {
       const expectedCount7Days = totalTimings * 7;
       const expectedCountYesterday = totalTimings;
       
+      console.log(`📊 Adherence calculation:`);
+      console.log(`  Yesterday: ${takenCountYesterday} taken / ${expectedCountYesterday} expected`);
+      console.log(`  7 Days: ${takenCount7Days} taken / ${expectedCount7Days} expected`);
+      
       // Calculate adherence percentages
       const adherence7Days = Math.min(100, Math.round((takenCount7Days / expectedCount7Days) * 100));
       const adherenceYesterday = Math.min(100, Math.round((takenCountYesterday / expectedCountYesterday) * 100));
+      
+      console.log(`  ✅ Yesterday adherence: ${adherenceYesterday}%`);
+      console.log(`  ✅ 7-day adherence: ${adherence7Days}%`);
       
       return {
         adherenceYesterday: adherenceYesterday,
@@ -1526,12 +1988,14 @@ class ClinicianDashboard {
   }
 
   /**
-   * Extract clinical events from observations and appointments
+   * Extract clinical events from observations, appointments, and communications
    * @param {Array} observations - Array of Observation resources
    * @param {Array} appointments - Array of Appointment resources
+   * @param {Array} communications - Array of Communication resources (optional)
+   * @param {string} practitionerId - Practitioner ID to filter communications (optional)
    * @returns {Array} Array of clinical event objects (top 3 most recent)
    */
-  extractClinicalEvents(observations, appointments) {
+  extractClinicalEvents(observations, appointments, communications = null, practitionerId = null) {
     const events = [];
     
     // Add appointments as clinical events
@@ -1541,7 +2005,64 @@ class ClinicianDashboard {
           events.push({
             date: apt.start.split('T')[0],
             type: apt.appointmentType?.text || 'Appointment',
-            note: apt.description || apt.status
+            note: apt.description || apt.status,
+            category: 'appointment'
+          });
+        }
+      }
+    }
+    
+    // Add communications as clinical events (if recipient is this practitioner)
+    if (communications && practitionerId) {
+      console.log(`📋 Processing ${communications.length} communications for Clinical Events (practitionerId: ${practitionerId})`);
+      
+      for (const comm of communications) {
+        // Check if this communication has the practitioner as a recipient
+        const recipients = comm.recipient || [];
+        const isPractitionerRecipient = recipients.some(recipient => {
+          const ref = recipient.reference || '';
+          return ref.includes(`Practitioner/${practitionerId}`);
+        });
+        
+        // Also include communications without specific recipient (patient-initiated)
+        const hasNoRecipient = !recipients || recipients.length === 0;
+        
+        if ((isPractitionerRecipient || hasNoRecipient) && comm.sent) {
+          const payload = comm.payload?.[0];
+          const contentString = payload?.contentString || 
+                               payload?.contentAttachment?.title || 
+                               'Communication';
+          
+          console.log(`  ✅ Including communication: "${contentString}" (has recipient: ${!hasNoRecipient})`);
+          
+          events.push({
+            date: comm.sent.split('T')[0],
+            type: 'Communication',
+            note: contentString,
+            category: 'communication',
+            status: comm.status
+          });
+        } else {
+          console.log(`  ⏭️ Skipping communication (not for this practitioner)`);
+        }
+      }
+    } else if (communications && !practitionerId) {
+      // If no practitionerId, show all communications
+      console.log(`📋 No practitionerId, showing all ${communications.length} communications`);
+      
+      for (const comm of communications) {
+        if (comm.sent) {
+          const payload = comm.payload?.[0];
+          const contentString = payload?.contentString || 
+                               payload?.contentAttachment?.title || 
+                               'Communication';
+          
+          events.push({
+            date: comm.sent.split('T')[0],
+            type: 'Communication',
+            note: contentString,
+            category: 'communication',
+            status: comm.status
           });
         }
       }
@@ -1777,59 +2298,74 @@ class ClinicianDashboard {
       return;
     }
 
-    container.innerHTML = patientsToShow.map(p => `
-      <div class="flex items-center py-3 border-b hover:bg-gray-50 cursor-pointer" onclick="window.dashboard.selectPatient('${p.id}')">
-        <div class="w-56 flex items-center">
-          <div class="w-10 h-10 flex-shrink-0 rounded-full ${this.getGenderBgColor(p.gender)} flex items-center justify-center mr-3">
+    container.innerHTML = patientsToShow.map(p => {
+      // Show red envelope icon if patient has pending communications
+      const envelopeIcon = p.pendingCommunications && p.pendingCommunications.length > 0 ? `
+        <button 
+          onclick="event.stopPropagation(); window.dashboard.showPendingCommunications('${p.id}')" 
+          class="ml-2 text-red-500 hover:text-red-700 transition-colors"
+          title="${p.pendingCommunications.length} pending communication(s)"
+        >
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
+            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
+          </svg>
+        </button>
+      ` : '';
+      
+      return `
+        <div class="flex items-center py-3 border-b hover:bg-gray-50 cursor-pointer" onclick="window.dashboard.selectPatient('${p.id}')">
+          <div class="w-10 h-10 justify-center flex-shrink-0 rounded-full ${this.getGenderBgColor(p.gender)} flex items-center justify-center mr-3">
             ${this.getGenderIcon(p.gender)}
           </div>
-          <div class="min-w-0">
-            <p class="font-medium text-sm">${p.name}</p>
+          <div class="w-44 flex justify-start items-center">
+            <p class="font-medium text-sm pl-5">${p.name}</p>
+            ${envelopeIcon}
             <!-- <p class="text-xs text-gray-500 truncate">ID: ${p.id}</p> -->
           </div>
-        </div>
-        <div class="w-28 flex justify-center">
-          <span class="inline-flex px-2 py-1 text-xs rounded ${this.getRiskBadgeClass(p.riskLevel)}">${this.capitalize(p.riskLevel)}</span>
-        </div>
-        <div class="flex-1 flex items-center justify-start space-x-3 pl-4">
-          <div class="flex flex-col items-center">
-            <div class="relative w-12 h-12">
-              <svg class="transform -rotate-90 w-12 h-12">
-                <circle cx="24" cy="24" r="20" stroke="#e5e7eb" stroke-width="4" fill="none" />
-                <circle cx="24" cy="24" r="20" stroke="${this.getAdherenceStrokeColor(p.adherenceYesterday || 0)}" stroke-width="4" fill="none" 
-                  stroke-dasharray="${2 * Math.PI * 20}" 
-                  stroke-dashoffset="${2 * Math.PI * 20 * (1 - (p.adherenceYesterday || 0) / 100)}" 
-                  stroke-linecap="round" />
-              </svg>
-              <div class="absolute inset-0 flex items-center justify-center">
-                <span class="text-xs font-medium">${p.adherenceYesterday || 0}%</span>
-              </div>
-            </div>
-            <span class="text-xs text-gray-500 mt-1">Yesterday</span>
+          <div class="w-28 flex justify-center">
+            <span class="inline-flex px-2 py-1 text-xs rounded ${this.getRiskBadgeClass(p.riskLevel)}">${this.capitalize(p.riskLevel)}</span>
           </div>
-          <div class="flex flex-col items-center">
-            <div class="relative w-12 h-12">
-              <svg class="transform -rotate-90 w-12 h-12">
-                <circle cx="24" cy="24" r="20" stroke="#e5e7eb" stroke-width="4" fill="none" />
-                <circle cx="24" cy="24" r="20" stroke="${this.getAdherenceStrokeColor(p.adherence7Days || 0)}" stroke-width="4" fill="none" 
-                  stroke-dasharray="${2 * Math.PI * 20}" 
-                  stroke-dashoffset="${2 * Math.PI * 20 * (1 - (p.adherence7Days || 0) / 100)}" 
-                  stroke-linecap="round" />
-              </svg>
-              <div class="absolute inset-0 flex items-center justify-center">
-                <span class="text-xs font-medium">${p.adherence7Days || 0}%</span>
+          <div class="flex-1 flex items-center justify-start space-x-3 pl-5">
+            <div class="flex flex-col items-center">
+              <div class="relative w-12 h-12">
+                <svg class="transform -rotate-90 w-12 h-12">
+                  <circle cx="24" cy="24" r="20" stroke="#e5e7eb" stroke-width="4" fill="none" />
+                  <circle cx="24" cy="24" r="20" stroke="${this.getAdherenceStrokeColor(p.adherenceYesterday || 0)}" stroke-width="4" fill="none" 
+                    stroke-dasharray="${2 * Math.PI * 20}" 
+                    stroke-dashoffset="${2 * Math.PI * 20 * (1 - (p.adherenceYesterday || 0) / 100)}" 
+                    stroke-linecap="round" />
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <span class="text-xs font-medium">${p.adherenceYesterday || 0}%</span>
+                </div>
               </div>
+              <span class="text-xs text-gray-500 mt-1">Yesterday</span>
             </div>
-            <span class="text-xs text-gray-500 mt-1">7 Days</span>
+            <div class="flex flex-col items-center">
+              <div class="relative w-12 h-12">
+                <svg class="transform -rotate-90 w-12 h-12">
+                  <circle cx="24" cy="24" r="20" stroke="#e5e7eb" stroke-width="4" fill="none" />
+                  <circle cx="24" cy="24" r="20" stroke="${this.getAdherenceStrokeColor(p.adherence7Days || 0)}" stroke-width="4" fill="none" 
+                    stroke-dasharray="${2 * Math.PI * 20}" 
+                    stroke-dashoffset="${2 * Math.PI * 20 * (1 - (p.adherence7Days || 0) / 100)}" 
+                    stroke-linecap="round" />
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <span class="text-xs font-medium">${p.adherence7Days || 0}%</span>
+                </div>
+              </div>
+              <span class="text-xs text-gray-500 mt-1">7 Days</span>
+            </div>
+          </div>
+          <div class="w-24 text-right">
+            <svg class="w-5 h-5 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
           </div>
         </div>
-        <div class="w-24 text-right">
-          <svg class="w-5 h-5 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-          </svg>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   /**
@@ -1887,6 +2423,9 @@ class ClinicianDashboard {
 
     this.switchClinicalTab('summary');
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // 自動生成 AI 結論
+    this.generateAIInsight();
   }
 
   /**
@@ -2253,21 +2792,43 @@ class ClinicianDashboard {
       return;
     }
 
-    container.innerHTML = events.map((e, index) => `
-      <div class="flex items-start space-x-4">
-        <div class="flex flex-col items-center">
-          <div class="w-3 h-3 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-gray-400'}"></div>
-          ${index < events.length - 1 ? '<div class="w-px h-full bg-gray-300 my-1"></div>' : ''}
-        </div>
-        <div class="flex-1 pb-4">
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-semibold text-sm">${e.type}</span>
-            <span class="text-xs text-gray-500">${new Date(e.date).toLocaleDateString('en-AU')}</span>
+    container.innerHTML = events.map((e, index) => {
+      // Format status badge if this is a Communication event
+      let statusBadge = '';
+      if (e.category === 'communication' && e.status) {
+        const statusColors = {
+          'preparation': 'bg-yellow-100 text-yellow-800',
+          'in-progress': 'bg-blue-100 text-blue-800',
+          'not-done': 'bg-gray-100 text-gray-800',
+          'on-hold': 'bg-orange-100 text-orange-800',
+          'stopped': 'bg-red-100 text-red-800',
+          'completed': 'bg-green-100 text-green-800',
+          'entered-in-error': 'bg-red-100 text-red-800',
+          'unknown': 'bg-gray-100 text-gray-800'
+        };
+        const colorClass = statusColors[e.status] || 'bg-gray-100 text-gray-800';
+        statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colorClass} ml-2">${e.status}</span>`;
+      }
+      
+      return `
+        <div class="flex items-start space-x-4">
+          <div class="flex flex-col items-center">
+            <div class="w-3 h-3 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-gray-400'}"></div>
+            ${index < events.length - 1 ? '<div class="w-px h-full bg-gray-300 my-1"></div>' : ''}
           </div>
-          <p class="text-sm text-gray-600">${e.note}</p>
+          <div class="flex-1 pb-4">
+            <div class="flex items-center justify-between mb-1">
+              <div class="flex items-center">
+                <span class="font-semibold text-sm">${e.type}</span>
+                ${statusBadge}
+              </div>
+              <span class="text-xs text-gray-500">${new Date(e.date).toLocaleDateString('en-AU')}</span>
+            </div>
+            <p class="text-sm text-gray-600">${e.note}</p>
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   /**
@@ -2350,6 +2911,728 @@ class ClinicianDashboard {
   }
 
   /**
+   * Generate AI-powered patient insight using OpenRouter API
+   * Analyzes all patient data from the overview section and generates a comprehensive summary
+   */
+  async generateAIInsight() {
+    const contentEl = document.getElementById('aiInsightContent');
+    const generateBtn = document.getElementById('generateAIInsight');
+    
+    if (!contentEl) {
+      console.warn('AI Insight content element not found');
+      return;
+    }
+    
+    if (!this.selectedPatient) {
+      contentEl.innerHTML = `
+        <div class="flex items-center space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+          </svg>
+          <span class="text-sm text-yellow-800">Please select a patient first</span>
+        </div>
+      `;
+      return;
+    }
+
+    // Show loading state
+    if (generateBtn) {
+      generateBtn.disabled = true;
+      generateBtn.innerHTML = `
+        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Generating...</span>
+      `;
+    }
+    
+    contentEl.innerHTML = `
+      <div class="flex items-center justify-center py-8 space-y-3 flex-col">
+        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
+        <p class="text-sm text-gray-600">Analyzing patient data with AI...</p>
+      </div>
+    `;
+
+    try {
+      const p = this.selectedPatient;
+      
+      // Gather all patient data from Patient Overview
+      const patientData = this.collectPatientOverviewData(p);
+      
+      // Build comprehensive AI prompt
+      const prompt = this.buildAIPrompt(patientData);
+      
+      // Call OpenRouter API
+      const OPENROUTER_API_KEY = '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';
+      
+      console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
+      console.log('🌐 Calling OpenRouter API for patient:', p.name);
+      
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': window.location.origin || 'http://localhost:3001',
+          'X-Title': 'everHealthier Clinic Dashboard'
+        },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 800
+        })
+      });
+
+      console.log('📡 API Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        
+        // Check for 401 Unauthorized error (API key issue)
+        if (response.status === 401) {
+          throw new Error('The API key token may have expired and needs to be updated. (401 Unauthorized)');
+        }
+        
+        // Try to parse error JSON for other errors
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error?.message || errorJson.message || errorMessage;
+        } catch (e) {
+          errorMessage = errorText.substring(0, 200);
+        }
+        
+        throw new Error(`API request failed: ${errorMessage}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ API Response received:', data);
+      
+      const aiInsight = data.choices?.[0]?.message?.content?.trim();
+
+      if (!aiInsight) {
+        console.error('❌ No insight in response:', data);
+        throw new Error('No insight generated from AI');
+      }
+
+      console.log('🤖 AI Insight generated successfully');
+      
+
+      // Display the AI insight with formatted output
+      contentEl.innerHTML = `
+        <div class="prose prose-sm max-w-none">
+          <div class="text-gray-800 leading-relaxed whitespace-pre-wrap">${this.formatAIInsight(aiInsight)}</div>
+        </div>
+        <div class="mt-4 pt-4 border-t border-purple-200 flex items-center justify-between">
+          <div class="flex items-center space-x-2 text-xs text-gray-500">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span>Generated by Meta LLaMA 3.3 70B</span>
+          </div>
+          <span class="text-xs text-gray-500">${new Date().toLocaleString('en-AU')}</span>
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('❌ AI generation error:', error);
+      console.log('⚙️ Generating fallback clinical summary...');
+      
+      // Generate local rule-based clinical summary as fallback
+      try {
+        const patientData = this.collectPatientOverviewData(this.selectedPatient);
+        const localSummary = this.generateLocalClinicalSummary(patientData);
+        
+        contentEl.innerHTML = `
+          <div class="prose prose-sm max-w-none">
+            <div class="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+              <strong>Note:</strong> AI service unavailable (${error.message}). Showing rule-based clinical summary instead.
+            </div>
+            <div class="text-gray-800 leading-relaxed whitespace-pre-wrap">${this.formatAIInsight(localSummary)}</div>
+          </div>
+          <div class="mt-4 pt-4 border-t border-purple-200 flex items-center justify-between">
+            <div class="flex items-center space-x-2 text-xs text-gray-500">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <span>Generated by Local Clinical Rules</span>
+            </div>
+            <span class="text-xs text-gray-500">${new Date().toLocaleString('en-AU')}</span>
+          </div>
+        `;
+      } catch (fallbackError) {
+        console.error('❌ Fallback generation also failed:', fallbackError);
+        contentEl.innerHTML = `
+          <div class="space-y-2">
+            <div class="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <svg class="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <div class="flex-1">
+                <p class="text-sm font-medium text-red-800">Unable to generate clinical summary</p>
+                <p class="text-xs text-red-600 mt-1">AI: ${error.message}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    } finally {
+      // Restore button state
+      if (generateBtn) {
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          <span>Generate</span>
+        `;
+      }
+    }
+  }
+
+  /**
+   * Collect all patient data from Patient Overview section
+   * @param {Object} p - Patient object
+   * @returns {Object} Comprehensive patient data object
+   */
+  collectPatientOverviewData(p) {
+    const data = {
+      name: p.name,
+      id: p.id,
+      riskLevel: p.riskLevel,
+      adherenceYesterday: p.adherenceYesterday || 0,
+      adherence7Days: p.adherence7Days || 0,
+      nextVisit: p.nextVisit,
+      
+      // Quick Vitals
+      bloodPressure: p.bp,
+      weight: p.weight,
+      temperature: p.temperature,
+      
+      // Renal Function Data (90 days)
+      renalData: p.renalData || [],
+      
+      // Immunosuppressant Data
+      immunoData: p.immunoData || [],
+      tacrolimus: this.getLatestTacrolimus(p.observations, p.transplantDate),
+      
+      // Clinical Events
+      clinicalEvents: p.clinicalEvents || [],
+      
+      // Self-reported data (14 days)
+      bpData: p.bpData || [],
+      weightData: p.weightData || [],
+      symptoms: p.symptoms || [],
+      
+      // Chart summaries
+      renalTrend: this.summarizeRenalTrend(p.renalData),
+      activityTrend: this.summarizeActivityTrend(p.renalData),
+      bpTrend: this.summarizeBPTrend(p.bpData),
+      weightTrend: this.summarizeWeightTrend(p.weightData)
+    };
+    
+    return data;
+  }
+
+  /**
+   * Build comprehensive AI prompt from patient data
+   * @param {Object} data - Patient overview data
+   * @returns {string} Formatted prompt for AI
+   */
+  buildAIPrompt(data) {
+    const prompt = `You are an expert nephrologist analyzing a post-kidney transplant patient. 
+Based on the comprehensive clinical data below, provide a detailed clinical summary and recommendations.
+
+**PATIENT OVERVIEW:**
+- Name: ${data.name}
+- Patient ID: ${data.id}
+- Risk Level: ${data.riskLevel.toUpperCase()}
+- Medication Adherence (Yesterday): ${data.adherenceYesterday}%
+- Medication Adherence (7 Days): ${data.adherence7Days}%
+- Next Visit: ${data.nextVisit ? new Date(data.nextVisit).toLocaleDateString('en-AU') : 'Not scheduled'}
+
+**LATEST VITAL SIGNS:**
+- Blood Pressure: ${data.bloodPressure || 'Not recorded'}
+- Weight: ${data.weight || 'Not recorded'}
+- Temperature: ${data.temperature || 'Not recorded'}
+
+**RENAL FUNCTION TREND (3 months):**
+${data.renalTrend}
+
+**IMMUNOSUPPRESSANT LEVELS:**
+${data.tacrolimus ? `- Tacrolimus: ${data.tacrolimus.value} ng/mL (Target: ${data.tacrolimus.targetMin}-${data.tacrolimus.targetMax} ng/mL)
+- Date: ${new Date(data.tacrolimus.date).toLocaleDateString('en-AU')}
+- Status: ${data.tacrolimus.value >= data.tacrolimus.targetMin && data.tacrolimus.value <= data.tacrolimus.targetMax ? 'Within range ✓' : 'OUT OF RANGE ⚠️'}` : 'No recent data'}
+
+**INFLAMMATORY MARKERS:**
+${data.activityTrend}
+
+**BLOOD PRESSURE TREND (14 days):**
+${data.bpTrend}
+
+**WEIGHT TREND (14 days):**
+${data.weightTrend}
+
+**PATIENT-REPORTED SYMPTOMS:**
+${data.symptoms.length > 0 ? data.symptoms.map(s => `- ${new Date(s.date).toLocaleDateString('en-AU')}: ${s.text}`).join('\n') : '- No symptoms reported'}
+
+**RECENT CLINICAL EVENTS:**
+${data.clinicalEvents.length > 0 ? data.clinicalEvents.slice(0, 5).map(e => `- ${new Date(e.date).toLocaleDateString('en-AU')}: ${e.event}`).join('\n') : '- No recent events'}
+
+CRITICAL INSTRUCTIONS:
+You MUST structure your response EXACTLY as follows, using these exact section titles without numbering or markdown headers:
+
+Overall Clinical Status
+[Brief assessment of the patient's current condition in 2-3 sentences]
+
+Key Concerns
+[List concerning trends or abnormal values as numbered points. Each point must have a BOLD subtitle followed by description:
+1. Medication Adherence: The patient's medication adherence is significantly low at 0% for the previous day and 31% over the last 7 days. This is a critical concern as consistent immunosuppression is essential for preventing graft rejection.
+2. Immunosuppressant Levels: The tacrolimus level is below the target range (6.9 ng/mL, with a target of 8-12 ng/mL), indicating potential under-immunosuppression and increased risk of graft rejection.
+etc.]
+
+Positive Findings
+[List improvements or stable parameters as numbered points. Each point must have a BOLD subtitle followed by description:
+1. Vital Signs: Blood pressure, weight, and temperature are within relatively normal limits.
+2. No Reported Symptoms: The patient has not reported any concerning symptoms in recent visits.
+etc.]
+
+Recommendations
+[List specific clinical actions as numbered points. Each point must have a BOLD subtitle followed by description:
+1. Medication Adherence Intervention: Urgent patient counseling on the critical importance of medication adherence. Consider adherence aids or medication reminder systems.
+2. Tacrolimus Dose Adjustment: Increase tacrolimus dose and recheck level in 5-7 days to ensure therapeutic range is achieved.
+etc.]
+
+Risk Assessment
+[Justify the ${data.riskLevel.toUpperCase()} risk level based on the data in 2-3 sentences]
+
+FORMATTING RULES:
+- Use ONLY the exact section titles shown above (no ### or ** or Step X:)
+- Start each section title on a new line
+- Leave a blank line after each section title
+- Use numbered lists (1., 2., etc.) for items within sections
+- Be concise but thorough - focus on clinically actionable insights
+- Include specific values and units when discussing lab results`;
+
+    return prompt;
+  }
+
+  /**
+   * Summarize renal function trend from data
+   * @param {Array} renalData - Array of renal function data points
+   * @returns {string} Summary text
+   */
+  summarizeRenalTrend(renalData) {
+    if (!renalData || renalData.length === 0) {
+      return '- No recent data available';
+    }
+    
+    const recent = renalData.slice(-5);
+    const latest = recent[recent.length - 1];
+    const oldest = recent[0];
+    
+    let summary = `- Latest eGFR: ${latest.eGFR || 'N/A'} mL/min, Creatinine: ${latest.Cr || 'N/A'} mg/dL, BUN: ${latest.BUN || 'N/A'} mg/dL\n`;
+    
+    if (oldest.eGFR && latest.eGFR) {
+      const eGFRChange = parseFloat(latest.eGFR) - parseFloat(oldest.eGFR);
+      summary += `- eGFR trend: ${eGFRChange > 0 ? '↑' : '↓'} ${Math.abs(eGFRChange).toFixed(1)} mL/min over recent period`;
+    }
+    
+    return summary;
+  }
+
+  /**
+   * Summarize inflammatory activity trend
+   * @param {Array} renalData - Array of renal data including CRP/WBC
+   * @returns {string} Summary text
+   */
+  summarizeActivityTrend(renalData) {
+    if (!renalData || renalData.length === 0) {
+      return '- No recent data available';
+    }
+    
+    const latest = renalData[renalData.length - 1];
+    return `- Latest CRP: ${latest.CRP || 'N/A'} mg/L, WBC: ${latest.WBC || 'N/A'} /μL`;
+  }
+
+  /**
+   * Summarize blood pressure trend
+   * @param {Array} bpData - Array of BP measurements
+   * @returns {string} Summary text
+   */
+  summarizeBPTrend(bpData) {
+    if (!bpData || bpData.length === 0) {
+      return '- No recent data available';
+    }
+    
+    const validBP = bpData.filter(d => d.systolic && d.diastolic);
+    if (validBP.length === 0) return '- No valid measurements';
+    
+    const avgSys = validBP.reduce((sum, d) => sum + parseFloat(d.systolic), 0) / validBP.length;
+    const avgDia = validBP.reduce((sum, d) => sum + parseFloat(d.diastolic), 0) / validBP.length;
+    
+    return `- Average: ${avgSys.toFixed(0)}/${avgDia.toFixed(0)} mmHg (${validBP.length} readings)`;
+  }
+
+  /**
+   * Summarize weight trend
+   * @param {Array} weightData - Array of weight measurements
+   * @returns {string} Summary text
+   */
+  summarizeWeightTrend(weightData) {
+    if (!weightData || weightData.length === 0) {
+      return '- No recent data available';
+    }
+    
+    const validWeights = weightData.filter(d => d.weight);
+    if (validWeights.length < 2) return `- Latest: ${validWeights[0]?.weight || 'N/A'} kg`;
+    
+    const latest = parseFloat(validWeights[validWeights.length - 1].weight);
+    const oldest = parseFloat(validWeights[0].weight);
+    const change = latest - oldest;
+    
+    return `- Latest: ${latest.toFixed(1)} kg (${change > 0 ? '+' : ''}${change.toFixed(1)} kg change over period)`;
+  }
+
+  /**
+   * Format AI insight text for better readability
+   * @param {string} text - Raw AI response
+   * @returns {string} Formatted HTML
+   */
+  formatAIInsight(text) {
+    // Split text into lines for processing
+    let lines = text.split('\n');
+    let formatted = [];
+    
+    // Section titles to recognize (without any special characters)
+    const sectionTitles = [
+      'Overall Clinical Status',
+      'Key Concerns',
+      'Positive Findings',
+      'Recommendations',
+      'Risk Assessment'
+    ];
+    
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      
+      // Skip empty lines
+      if (!line) {
+        formatted.push('');
+        continue;
+      }
+      
+      // Check if this line is a section title
+      const isSectionTitle = sectionTitles.some(title => 
+        line === title || 
+        line.replace(/^#+\s*/, '').replace(/^\*\*/, '').replace(/\*\*$/, '') === title
+      );
+      
+      if (isSectionTitle) {
+        // Format as section header
+        const cleanTitle = line.replace(/^#+\s*/, '').replace(/^\*\*/, '').replace(/\*\*$/, '').trim();
+        formatted.push(`<div class="font-bold text-base text-gray-900 mb-2">${cleanTitle}</div>`);
+      }
+      // Check if it's a numbered list item (1., 2., etc.)
+      else if (/^\d+\./.test(line)) {
+        // Process line to bold text before first colon (the subtitle)
+        let processedLine = line;
+        
+        // Check if line contains a subtitle pattern (text before colon)
+        const colonIndex = line.indexOf(':');
+        if (colonIndex > 0) {
+          // Extract number, subtitle, and description
+          const numberMatch = line.match(/^(\d+\.\s*)/);
+          const number = numberMatch ? numberMatch[1] : '';
+          const restOfLine = line.substring(number.length);
+          
+          // Split at first colon
+          const subtitle = restOfLine.substring(0, restOfLine.indexOf(':'));
+          const description = restOfLine.substring(restOfLine.indexOf(':') + 1);
+          
+          processedLine = `${number}<strong>${subtitle}</strong>:${description}`;
+        }
+        
+        formatted.push(`<div class="text-sm ml-4 mb-2">${processedLine}</div>`);
+      }
+      // Check if it's a bullet point
+      else if (/^[-•]/.test(line)) {
+        formatted.push(`<div class="text-sm ml-4 mb-1">${line.replace(/^[-•]\s*/, '• ')}</div>`);
+      }
+      // Regular paragraph
+      else {
+        // Bold any remaining **text**
+        line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        formatted.push(`<div class="text-sm ml-4 mb-2">${line}</div>`);
+      }
+    }
+    
+    return formatted.join('');
+  }
+
+  /**
+   * Generate local rule-based clinical summary when AI is unavailable
+   * @param {Object} data - Patient overview data
+   * @returns {string} Formatted clinical summary
+   */
+  generateLocalClinicalSummary(data) {
+    const sections = [];
+    
+    // 1. Overall Clinical Status
+    sections.push('Overall Clinical Status');
+    sections.push(''); // blank line
+    
+    let status = [];
+    if (data.riskLevel === 'high') {
+      status.push('High-risk patient requiring close monitoring and intervention');
+    } else if (data.riskLevel === 'medium') {
+      status.push('Moderate-risk patient with some concerning parameters');
+    } else {
+      status.push('Stable post-transplant patient with generally good parameters');
+    }
+    
+    // Check adherence
+    if (data.adherence7Days < 60) {
+      status.push(`Poor medication adherence (${data.adherence7Days}%) is a major concern`);
+    } else if (data.adherence7Days < 80) {
+      status.push(`Suboptimal medication adherence (${data.adherence7Days}%) needs improvement`);
+    } else {
+      status.push(`Good medication adherence (${data.adherence7Days}%)`);
+    }
+    
+    sections.push(status.join('. ') + '.');
+    sections.push(''); // blank line
+    
+    // 2. Key Concerns
+    sections.push('Key Concerns');
+    sections.push(''); // blank line
+    const concerns = [];
+    let concernCount = 1;
+    
+    // Tacrolimus analysis
+    if (data.tacrolimus) {
+      const tac = data.tacrolimus;
+      if (tac.value < tac.targetMin) {
+        concerns.push(`${concernCount}. Immunosuppressant Levels: Tacrolimus level BELOW target (${tac.value} ng/mL, target: ${tac.targetMin}-${tac.targetMax}) - Risk of rejection`);
+        concernCount++;
+      } else if (tac.value > tac.targetMax) {
+        concerns.push(`${concernCount}. Immunosuppressant Levels: Tacrolimus level ABOVE target (${tac.value} ng/mL, target: ${tac.targetMin}-${tac.targetMax}) - Risk of toxicity`);
+        concernCount++;
+      }
+    }
+    
+    // Renal function analysis
+    const renalData = data.renalData || [];
+    if (renalData.length > 0) {
+      const latest = renalData[renalData.length - 1];
+      if (latest.eGFR && parseFloat(latest.eGFR) < 30) {
+        concerns.push(`${concernCount}. Renal Function: Severely reduced eGFR (${latest.eGFR} mL/min) - Stage 4-5 CKD`);
+        concernCount++;
+      } else if (latest.eGFR && parseFloat(latest.eGFR) < 45) {
+        concerns.push(`${concernCount}. Renal Function: Moderately reduced eGFR (${latest.eGFR} mL/min) - Stage 3b CKD`);
+        concernCount++;
+      }
+      
+      if (latest.Cr && parseFloat(latest.Cr) > 2.0) {
+        concerns.push(`${concernCount}. Creatinine Level: Elevated creatinine (${latest.Cr} mg/dL) - Possible graft dysfunction`);
+        concernCount++;
+      }
+      
+      if (latest.CRP && parseFloat(latest.CRP) > 10) {
+        concerns.push(`${concernCount}. Inflammatory Markers: Significantly elevated CRP (${latest.CRP} mg/L) - Active inflammation`);
+        concernCount++;
+      } else if (latest.CRP && parseFloat(latest.CRP) > 5) {
+        concerns.push(`${concernCount}. Inflammatory Markers: Moderately elevated CRP (${latest.CRP} mg/L) - Monitor for infection`);
+        concernCount++;
+      }
+    }
+    
+    // BP analysis
+    if (data.bloodPressure && data.bloodPressure !== '-') {
+      const bpMatch = data.bloodPressure.match(/(\d+)\/(\d+)/);
+      if (bpMatch) {
+        const sys = parseInt(bpMatch[1]);
+        const dia = parseInt(bpMatch[2]);
+        if (sys >= 140 || dia >= 90) {
+          concerns.push(`${concernCount}. Blood Pressure: Hypertension (${data.bloodPressure} mmHg) - Adjust antihypertensive therapy`);
+          concernCount++;
+        }
+      }
+    }
+    
+    // Adherence concerns
+    if (data.adherence7Days < 80) {
+      concerns.push(`${concernCount}. Medication Adherence: Poor medication adherence (${data.adherence7Days}%) - Patient education needed`);
+      concernCount++;
+    }
+    
+    // Symptoms
+    if (data.symptoms && data.symptoms.length > 0) {
+      const recentSymptoms = data.symptoms.slice(-3);
+      concerns.push(`${concernCount}. Patient Symptoms: ${recentSymptoms.map(s => s.text).join('; ')}`);
+      concernCount++;
+    }
+    
+    if (concerns.length === 0) {
+      sections.push('No major concerns identified at this time.');
+    } else {
+      sections.push(concerns.join('\n'));
+    }
+    sections.push(''); // blank line
+    
+    // 3. Positive Findings
+    sections.push('Positive Findings');
+    sections.push(''); // blank line
+    const positives = [];
+    let positiveCount = 1;
+    
+    // Tacrolimus in range
+    if (data.tacrolimus) {
+      const tac = data.tacrolimus;
+      if (tac.value >= tac.targetMin && tac.value <= tac.targetMax) {
+        positives.push(`${positiveCount}. Immunosuppressant Levels: Tacrolimus within therapeutic range (${tac.value} ng/mL)`);
+        positiveCount++;
+      }
+    }
+    
+    // Good adherence
+    if (data.adherence7Days >= 80) {
+      positives.push(`${positiveCount}. Medication Adherence: Excellent medication adherence (${data.adherence7Days}%)`);
+      positiveCount++;
+    }
+    
+    // Stable renal function
+    if (renalData.length >= 2) {
+      const latest = renalData[renalData.length - 1];
+      const previous = renalData[renalData.length - 2];
+      if (latest.eGFR && previous.eGFR) {
+        const change = parseFloat(latest.eGFR) - parseFloat(previous.eGFR);
+        if (Math.abs(change) < 5) {
+          positives.push(`${positiveCount}. Renal Function: Stable eGFR (${latest.eGFR} mL/min, minimal change)`);
+          positiveCount++;
+        } else if (change > 0) {
+          positives.push(`${positiveCount}. Renal Function: Improving eGFR (↑${change.toFixed(1)} mL/min)`);
+          positiveCount++;
+        }
+      }
+    }
+    
+    // Normal inflammatory markers
+    if (renalData.length > 0) {
+      const latest = renalData[renalData.length - 1];
+      if (latest.CRP && parseFloat(latest.CRP) < 5) {
+        positives.push(`${positiveCount}. Inflammatory Markers: Normal CRP (${latest.CRP} mg/L) - No active inflammation`);
+        positiveCount++;
+      }
+      if (latest.WBC) {
+        const wbc = parseFloat(latest.WBC);
+        if (wbc >= 4000 && wbc <= 11000) {
+          positives.push(`${positiveCount}. White Blood Cell Count: WBC within normal range (${latest.WBC}/μL)`);
+          positiveCount++;
+        }
+      }
+    }
+    
+    if (positives.length === 0) {
+      sections.push('Continue current management plan.');
+    } else {
+      sections.push(positives.join('\n'));
+    }
+    sections.push(''); // blank line
+    
+    // 4. Recommendations
+    sections.push('Recommendations');
+    sections.push(''); // blank line
+    const recommendations = [];
+    let recCount = 1;
+    
+    // Based on concerns
+    if (data.tacrolimus) {
+      const tac = data.tacrolimus;
+      if (tac.value < tac.targetMin) {
+        recommendations.push(`${recCount}. Tacrolimus Dose Adjustment: Consider increasing tacrolimus dose and recheck level in 5-7 days`);
+        recCount++;
+      } else if (tac.value > tac.targetMax) {
+        recommendations.push(`${recCount}. Tacrolimus Dose Adjustment: Consider reducing tacrolimus dose and recheck level in 5-7 days`);
+        recCount++;
+      } else {
+        recommendations.push(`${recCount}. Tacrolimus Monitoring: Continue current tacrolimus dose, routine monitoring`);
+        recCount++;
+      }
+    }
+    
+    if (data.adherence7Days < 80) {
+      recommendations.push(`${recCount}. Adherence Counseling: Urgent patient counseling on medication adherence`);
+      recCount++;
+      recommendations.push(`${recCount}. Adherence Support: Consider medication reminder systems or adherence aids`);
+      recCount++;
+    }
+    
+    if (renalData.length > 0) {
+      const latest = renalData[renalData.length - 1];
+      if (latest.eGFR && parseFloat(latest.eGFR) < 45) {
+        recommendations.push(`${recCount}. Nephrology Consultation: Specialist review for declining renal function`);
+        recCount++;
+        recommendations.push(`${recCount}. Medication Review: Comprehensive review of immunosuppression regimen`);
+        recCount++;
+      }
+      if (latest.CRP && parseFloat(latest.CRP) > 5) {
+        recommendations.push(`${recCount}. Inflammation Investigation: Complete infection workup to identify source`);
+        recCount++;
+      }
+    }
+    
+    if (data.symptoms && data.symptoms.length > 0) {
+      recommendations.push(`${recCount}. Symptom Management: Address patient-reported symptoms in next visit`);
+      recCount++;
+    }
+    
+    // Standard recommendations
+    recommendations.push(`${recCount}. Routine Monitoring: Continue routine post-transplant monitoring protocols`);
+    recCount++;
+    recommendations.push(`${recCount}. Lifestyle Management: Ensure patient maintains adequate hydration and healthy diet`);
+    
+    sections.push(recommendations.join('\n'));
+    sections.push(''); // blank line
+    
+    // 5. Risk Assessment
+    sections.push('Risk Assessment');
+    sections.push(''); // blank line
+    
+    let riskJustification = '';
+    if (data.riskLevel === 'high') {
+      const reasons = [];
+      if (data.adherence7Days < 60) reasons.push('poor adherence');
+      if (data.tacrolimus && (data.tacrolimus.value < data.tacrolimus.targetMin || data.tacrolimus.value > data.tacrolimus.targetMax)) {
+        reasons.push('tacrolimus out of range');
+      }
+      if (renalData.length > 0 && renalData[renalData.length - 1].eGFR && parseFloat(renalData[renalData.length - 1].eGFR) < 45) {
+        reasons.push('declining renal function');
+      }
+      if (renalData.length > 0 && renalData[renalData.length - 1].CRP && parseFloat(renalData[renalData.length - 1].CRP) > 10) {
+        reasons.push('elevated inflammatory markers');
+      }
+      riskJustification = `High-risk classification appropriate due to: ${reasons.join(', ')}. Requires intensive monitoring and immediate interventions.`;
+    } else if (data.riskLevel === 'medium') {
+      riskJustification = 'Medium-risk classification based on some suboptimal parameters. Close monitoring recommended with potential for intervention.';
+    } else {
+      riskJustification = 'Normal-risk classification reflects stable post-transplant course. Continue routine monitoring protocols.';
+    }
+    
+    sections.push(riskJustification);
+    
+    return sections.join('\n');
+  }
+
+  /**
    * Get CSS class for risk level badge
    * @param {string} level - Risk level (high/medium/normal)
    * @returns {string} Tailwind CSS classes for badge styling
@@ -2421,6 +3704,174 @@ class ClinicianDashboard {
   }
 
   /**
+   * Show pending communications modal for a specific patient
+   * @param {string} patientId - Patient's FHIR ID
+   */
+  showPendingCommunications(patientId) {
+    const patient = this.patients.find(p => p.id === patientId);
+    if (!patient || !patient.pendingCommunications || patient.pendingCommunications.length === 0) {
+      alert('No pending communications found for this patient.');
+      return;
+    }
+
+    // Update patient name in modal
+    document.getElementById('pendingCommPatientName').textContent = patient.name;
+
+    // All available status options
+    const allStatuses = ['preparation', 'in-progress', 'not-done', 'on-hold', 'stopped', 'completed', 'entered-in-error', 'unknown'];
+
+    // Populate table
+    const tbody = document.getElementById('pendingCommTableBody');
+    tbody.innerHTML = patient.pendingCommunications.map((comm, index) => {
+      const sentDate = comm.sent ? new Date(comm.sent).toLocaleString('en-AU') : 'N/A';
+      
+      // Create status options excluding current status
+      const statusOptions = allStatuses
+        .filter(s => s !== comm.status)
+        .map(s => `<option value="${s}">${s}</option>`)
+        .join('');
+
+      return `
+        <tr class="border-b hover:bg-gray-50">
+          <td class="px-3 py-2 text-xs">${sentDate}</td>
+          <td class="px-3 py-2 text-sm">${comm.message}</td>
+          <td class="px-3 py-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+              ${comm.status}
+            </span>
+          </td>
+          <td class="px-3 py-2">
+            <select 
+              class="comm-status-select border border-gray-300 rounded px-2 py-1 text-sm w-full"
+              data-comm-id="${comm.id}"
+              data-original-status="${comm.status}"
+            >
+              <option value="">-- No Change --</option>
+              ${statusOptions}
+            </select>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Store patient ID for later use
+    this.currentPendingCommPatientId = patientId;
+
+    // Show modal
+    const modal = document.getElementById('pendingCommunicationsModal');
+    modal.classList.remove('hidden');
+  }
+
+  /**
+   * Save updated communication statuses to HAPI FHIR
+   */
+  async savePendingCommunications() {
+    const selects = document.querySelectorAll('.comm-status-select');
+    const updates = [];
+
+    // Collect all changes
+    selects.forEach(select => {
+      const newStatus = select.value;
+      if (newStatus && newStatus !== '') {
+        const commId = select.dataset.commId;
+        const originalStatus = select.dataset.originalStatus;
+        
+        // Find the full Communication resource
+        const patient = this.patients.find(p => p.id === this.currentPendingCommPatientId);
+        if (patient) {
+          const comm = patient.pendingCommunications.find(c => c.id === commId);
+          if (comm && comm.fullResource) {
+            updates.push({
+              id: commId,
+              oldStatus: originalStatus,
+              newStatus: newStatus,
+              resource: comm.fullResource
+            });
+          }
+        }
+      }
+    });
+
+    if (updates.length === 0) {
+      alert('No changes to save.');
+      return;
+    }
+
+    console.log(`📝 Saving ${updates.length} communication status updates...`);
+
+    // Disable save button
+    const saveBtn = document.getElementById('savePendingCommBtn');
+    const originalText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    try {
+      // Update each communication
+      const updatePromises = updates.map(async (update) => {
+        try {
+          // Update the status in the resource
+          const updatedResource = { ...update.resource };
+          updatedResource.status = update.newStatus;
+
+          // Send PUT request to HAPI FHIR
+          const response = await fetch(`${HAPI_FHIR_BASE}/Communication/${update.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/fhir+json'
+            },
+            body: JSON.stringify(updatedResource)
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to update Communication ${update.id}: ${response.statusText}`);
+          }
+
+          console.log(`✅ Updated Communication ${update.id}: ${update.oldStatus} → ${update.newStatus}`);
+          return { success: true, id: update.id };
+        } catch (error) {
+          console.error(`❌ Error updating Communication ${update.id}:`, error);
+          return { success: false, id: update.id, error: error.message };
+        }
+      });
+
+      const results = await Promise.all(updatePromises);
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+
+      if (failCount > 0) {
+        alert(`Updated ${successCount} communication(s), but ${failCount} failed. Check console for details.`);
+      } else {
+        alert(`Successfully updated ${successCount} communication(s)!`);
+      }
+
+      // Close modal
+      document.getElementById('pendingCommunicationsModal').classList.add('hidden');
+
+      // Refresh patient list to update pending communication counts
+      await this.loadPatients();
+      this.updateStatistics();
+      this.renderPatientList();
+      
+      // If a patient is currently selected, refresh their clinical events
+      if (this.selectedPatient) {
+        const updatedPatient = this.patients.find(p => p.id === this.selectedPatient.id);
+        if (updatedPatient) {
+          this.selectedPatient = updatedPatient;
+          this.renderClinicalEventsTab(updatedPatient);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error saving communications:', error);
+      alert('An error occurred while saving. Please try again.');
+    } finally {
+      // Re-enable save button
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
+  }
+
+  /**
    * Handle user logout
    * Clears authentication data and redirects to login page
    */
@@ -2460,5 +3911,30 @@ window.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, waiting for Chart.js...');
   waitForChart(() => {
     window.dashboard = new ClinicianDashboard();
+    
+    // Setup pending communications modal event listeners
+    const closePendingCommBtn = document.getElementById('closePendingCommModal');
+    if (closePendingCommBtn) {
+      closePendingCommBtn.addEventListener('click', () => {
+        document.getElementById('pendingCommunicationsModal').classList.add('hidden');
+      });
+    }
+    
+    const savePendingCommBtn = document.getElementById('savePendingCommBtn');
+    if (savePendingCommBtn) {
+      savePendingCommBtn.addEventListener('click', () => {
+        window.dashboard.savePendingCommunications();
+      });
+    }
+    
+    // Close modal when clicking outside
+    const pendingCommModal = document.getElementById('pendingCommunicationsModal');
+    if (pendingCommModal) {
+      pendingCommModal.addEventListener('click', (e) => {
+        if (e.target === pendingCommModal) {
+          pendingCommModal.classList.add('hidden');
+        }
+      });
+    }
   });
 });
