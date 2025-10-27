@@ -2964,7 +2964,7 @@ class ClinicianDashboard {
       const prompt = this.buildAIPrompt(patientData);
       
       // Call OpenRouter API
-      const OPENROUTER_API_KEY = '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';
+      const OPENROUTER_API_KEY = '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';
       
       console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
       console.log('🌐 Calling OpenRouter API for patient:', p.name);
@@ -3355,8 +3355,12 @@ FORMATTING RULES:
           const restOfLine = line.substring(number.length);
           
           // Split at first colon
-          const subtitle = restOfLine.substring(0, restOfLine.indexOf(':'));
-          const description = restOfLine.substring(restOfLine.indexOf(':') + 1);
+          let subtitle = restOfLine.substring(0, restOfLine.indexOf(':'));
+          let description = restOfLine.substring(restOfLine.indexOf(':') + 1);
+          
+          // Remove ** markdown from subtitle and description
+          subtitle = subtitle.replace(/\*\*/g, '');
+          description = description.replace(/\*\*/g, '');
           
           processedLine = `${number}<strong>${subtitle}</strong>:${description}`;
         }
