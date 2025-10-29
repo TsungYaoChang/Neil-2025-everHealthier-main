@@ -4,7 +4,20 @@
 
 ### 1. 設置 API Keys (環境變數)
 
-**選項 A: 使用 PowerShell 設置環境變數 (推薦)**
+**選項 A: 使用 PowerShell 啟動腳本 (推薦)**
+
+```powershell
+# 1. 複製範例文件
+copy start-dev.ps1.example start-dev.ps1
+
+# 2. 編輯 start-dev.ps1,替換為你的實際 API keys
+# 使用任何文本編輯器打開 start-dev.ps1
+
+# 3. 啟動伺服器
+.\start-dev.ps1
+```
+
+**選項 B: 手動設置環境變數**
 
 ```powershell
 # 設置環境變數
@@ -14,14 +27,6 @@ $env:OPENROUTER_PATIENT_INSIGHT="sk-or-v1-your-key-here"
 
 # 啟動伺服器
 node fhir-proxy.js
-```
-
-**選項 B: 使用啟動腳本 (自動設置)**
-
-```powershell
-# 編輯 start-dev.ps1 加入你的 API keys
-# 然後執行:
-.\start-dev.ps1
 ```
 
 ### 2. 訪問應用程式
