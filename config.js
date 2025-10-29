@@ -32,11 +32,12 @@ const CONFIG = {
   PATIENT_SCOPE: 'launch/patient openid fhirUser profile patient/Patient.read patient/Observation.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Condition.read patient/QuestionnaireResponse.read',
   PRACTITIONER_SCOPE: 'openid fhirUser profile user/Patient.read user/Practitioner.read user/Observation.read user/MedicationRequest.read user/MedicationStatement.read user/Condition.read user/QuestionnaireResponse.read',
   
-  // OpenRouter API keys
+  // OpenRouter API keys - DO NOT PUT REAL KEYS HERE
+  // Load from config.local.js (not tracked by git) or use backend proxy
   OPENROUTER_API_KEYS: {
-    CLINIC_INSIGHT: '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',
-    PATIENT_ARTICLE_RANKING: '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',
-    PATIENT_INSIGHT: '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'
+    CLINIC_INSIGHT: '',
+    PATIENT_ARTICLE_RANKING: '',
+    PATIENT_INSIGHT: ''
   },
   
   // Additional settings
@@ -45,6 +46,12 @@ const CONFIG = {
 
 // Make config globally available
 window.APP_CONFIG = CONFIG;
+
+// Merge with local config if available (contains API keys)
+if (typeof window.LOCAL_CONFIG !== 'undefined') {
+  Object.assign(CONFIG.OPENROUTER_API_KEYS, window.LOCAL_CONFIG.OPENROUTER_API_KEYS);
+  console.log('Local API keys loaded successfully');
+}
 
 console.log('App Config loaded:', {
   backend: CONFIG.BACKEND_URL,
