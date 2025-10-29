@@ -25,6 +25,7 @@ class PatientDashboard {
     // HAPI FHIR and Backend configuration
     this.FHIR_BASE = window.APP_CONFIG?.HAPI_FHIR_BASE || 'https://hapi.fhir.org/baseR4';
     this.BACKEND_URL = window.APP_CONFIG?.BACKEND_URL || 'http://localhost:3001';
+    this.openRouterKeys = window.APP_CONFIG?.OPENROUTER_API_KEYS || {};
 
     // Track loading state for reminders and completion
     this.remindersLoaded = false;
@@ -3184,7 +3185,10 @@ class PatientDashboard {
   async rankArticlesWithAI(patientData, articles) {
     // Note: If you get 401 errors, the API key may have expired
     // Get a new key from: https://openrouter.ai/keys
-    const OPENROUTER_API_KEY = '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';
+    const OPENROUTER_API_KEY = this.openRouterKeys.PATIENT_ARTICLE_RANKING || this.openRouterKeys.DEFAULT || '';
+    if (!OPENROUTER_API_KEY) {
+      throw new Error('OpenRouter API key for article ranking is not configured. Please update config.js.');
+    }
 
     const prompt = `You are a healthcare AI assistant for post kidney transplant patients. 
                     Based on the following patient health data, 
@@ -3338,7 +3342,10 @@ Do not include any explanation, just the JSON array.`;
       const prompt = this.buildPatientAIPrompt(patientData);
       
       // Call OpenRouter API
-      const OPENROUTER_API_KEY = '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';
+      const OPENROUTER_API_KEY = this.openRouterKeys.PATIENT_INSIGHT || this.openRouterKeys.DEFAULT || '';
+      if (!OPENROUTER_API_KEY) {
+        throw new Error('OpenRouter API key for patient insights is not configured. Please update config.js.');
+      }
       
       console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
       console.log('🌐 Calling OpenRouter API for patient insight');

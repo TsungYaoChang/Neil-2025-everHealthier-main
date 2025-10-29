@@ -32,6 +32,13 @@ const CONFIG = {
   PATIENT_SCOPE: 'launch/patient openid fhirUser profile patient/Patient.read patient/Observation.read patient/MedicationRequest.read patient/MedicationStatement.read patient/Condition.read patient/QuestionnaireResponse.read',
   PRACTITIONER_SCOPE: 'openid fhirUser profile user/Patient.read user/Practitioner.read user/Observation.read user/MedicationRequest.read user/MedicationStatement.read user/Condition.read user/QuestionnaireResponse.read',
   
+  // OpenRouter API keys
+  OPENROUTER_API_KEYS: {
+    CLINIC_INSIGHT: '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',
+    PATIENT_ARTICLE_RANKING: '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',
+    PATIENT_INSIGHT: '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'
+  },
+  
   // Additional settings
   ENABLE_NOTIFICATIONS: false
 };

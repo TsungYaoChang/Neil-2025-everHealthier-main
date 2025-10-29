@@ -2,6 +2,7 @@
 
 // ========== HAPI FHIR SERVER ==========
 const HAPI_FHIR_BASE = 'https://hapi.fhir.org/baseR4';
+const OPENROUTER_API_KEYS = window.APP_CONFIG?.OPENROUTER_API_KEYS || {};
 
 // ========== PROTECT CHART.JS FROM common.js CONFLICT ==========
 let ChartJS = null;
@@ -2964,7 +2965,10 @@ class ClinicianDashboard {
       const prompt = this.buildAIPrompt(patientData);
       
       // Call OpenRouter API
-      const OPENROUTER_API_KEY = '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';
+      const OPENROUTER_API_KEY = OPENROUTER_API_KEYS.CLINIC_INSIGHT || OPENROUTER_API_KEYS.DEFAULT || '';
+      if (!OPENROUTER_API_KEY) {
+        throw new Error('OpenRouter API key for clinic insights is not configured. Please update config.js.');
+      }
       
       console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
       console.log('🌐 Calling OpenRouter API for patient:', p.name);
