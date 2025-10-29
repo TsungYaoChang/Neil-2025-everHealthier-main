@@ -25,6 +25,87 @@ const smartPages = require('./smart-pages'); // 靜態 SMART 登入 / callback �
 // Use PORT from environment variable (for Render.com) or default to 3001
 const PORT = process.env.PORT || 3001;
 
+// OpenRouter API Keys from environment variables (set in Render.com)
+const OPENROUTER_API_KEYS = {
+  CLINIC_INSIGHT: process.env.OPENROUTER_CLINIC_INSIGHT || '',
+  PATIENT_ARTICLE_RANKING: process.env.OPENROUTER_PATIENT_ARTICLE_RANKING || '',
+  PATIENT_INSIGHT: process.env.OPENROUTER_PATIENT_INSIGHT || ''
+};
+
+// Log API key status (without exposing the actual keys)
+console.log('OpenRouter API Keys loaded:', {
+  CLINIC_INSIGHT: OPENROUTER_API_KEYS.CLINIC_INSIGHT ? '✓ Set' : '✗ Missing',
+  PATIENT_ARTICLE_RANKING: OPENROUTER_API_KEYS.PATIENT_ARTICLE_RANKING ? '✓ Set' : '✗ Missing',
+  PATIENT_INSIGHT: OPENROUTER_API_KEYS.PATIENT_INSIGHT ? '✓ Set' : '✗ Missing'
+});
+
+/**
+ * proxyOpenRouterRequest
+ * 代理 OpenRouter API 請求,使用環境變數中的 API Key
+ */
+function proxyOpenRouterRequest(req, res, apiKeyType) {
+  const apiKey = OPENROUTER_API_KEYS[apiKeyType];
+  
+  if (!apiKey) {
+    res.writeHead(500, { 
+      'Content-Type': 'application/json', 
+      'Access-Control-Allow-Origin': '*' 
+    });
+    res.end(JSON.stringify({ 
+      error: 'API key not configured',
+      message: `Environment variable OPENROUTER_${apiKeyType} is not set` 
+    }));
+    return;
+  }
+
+  // Read request body
+  let body = '';
+  req.on('data', (chunk) => {
+    body += chunk.toString();
+  });
+
+  req.on('end', () => {
+    const options = {
+      hostname: 'openrouter.ai',
+      port: 443,
+      path: '/api/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.RENDER_EXTERNAL_URL || 'http://localhost:3001',
+        'X-Title': 'Ever Healthier'
+      }
+    };
+
+    const proxyReq = https.request(options, (apiRes) => {
+      let data = '';
+      apiRes.on('data', (chunk) => (data += chunk));
+      apiRes.on('end', () => {
+        res.writeHead(apiRes.statusCode || 200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(data);
+      });
+    });
+
+    proxyReq.on('error', (err) => {
+      res.writeHead(500, { 
+        'Content-Type': 'application/json', 
+        'Access-Control-Allow-Origin': '*' 
+      });
+      res.end(JSON.stringify({ 
+        error: 'OpenRouter API error', 
+        detail: err.message 
+      }));
+    });
+
+    proxyReq.write(body);
+    proxyReq.end();
+  });
+}
+
 /**
  * buildQuery
  * 組合查詢 HAPI FHIR Patient 與關聯資源的 URL
@@ -85,14 +166,90 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type,Authorization',
     });
     return res.end();
   }
 
   const urlObj = url.parse(req.url, true);
   const pathname = decodeURIComponent(urlObj.pathname || '/');
+
+  // ---- Proxy SMART Health IT configuration requests to avoid CORS issues ----
+  if (pathname === '/.well-known/smart-configuration') {
+    const smartConfigUrl = 'https://r4.smarthealthit.org/.well-known/smart-configuration';
+    https
+      .get(smartConfigUrl, (apiRes) => {
+        let data = '';
+        apiRes.on('data', (chunk) => (data += chunk));
+        apiRes.on('end', () => {
+          res.writeHead(apiRes.statusCode || 200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(data);
+        });
+      })
+      .on('error', (err) => {
+        res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: 'SMART config fetch error', detail: err.message }));
+      });
+    return;
+  }
+
+  // ---- Proxy SMART Health IT metadata requests to avoid CORS issues ----
+  if (pathname === '/metadata') {
+    const metadataUrl = 'https://r4.smarthealthit.org/metadata';
+    https
+      .get(metadataUrl, (apiRes) => {
+        let data = '';
+        apiRes.on('data', (chunk) => (data += chunk));
+        apiRes.on('end', () => {
+          res.writeHead(apiRes.statusCode || 200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(data);
+        });
+      })
+      .on('error', (err) => {
+        res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: 'Metadata fetch error', detail: err.message }));
+      });
+    return;
+  }
+
+  // ---- OpenRouter API Proxy Endpoints ----
+  // These endpoints proxy requests to OpenRouter API using server-side API keys
+  if (pathname === '/api/openrouter/clinic-insight') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Method not allowed. Use POST.' }));
+      return;
+    }
+    proxyOpenRouterRequest(req, res, 'CLINIC_INSIGHT');
+    return;
+  }
+
+  if (pathname === '/api/openrouter/article-ranking') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Method not allowed. Use POST.' }));
+      return;
+    }
+    proxyOpenRouterRequest(req, res, 'PATIENT_ARTICLE_RANKING');
+    return;
+  }
+
+  if (pathname === '/api/openrouter/patient-insight') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Method not allowed. Use POST.' }));
+      return;
+    }
+    proxyOpenRouterRequest(req, res, 'PATIENT_INSIGHT');
+    return;
+  }
 
   // ---- /api/patient 路由: 代理至 HAPI FHIR 並回傳 JSON Bundle ----
   if (pathname.startsWith('/api/patient')) {

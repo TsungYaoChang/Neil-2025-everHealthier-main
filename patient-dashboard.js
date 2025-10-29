@@ -3183,12 +3183,10 @@ class PatientDashboard {
 
   // Rank articles using OpenRouter AI
   async rankArticlesWithAI(patientData, articles) {
-    // Note: If you get 401 errors, the API key may have expired
-    // Get a new key from: https://openrouter.ai/keys
-    const OPENROUTER_API_KEY = this.openRouterKeys.PATIENT_ARTICLE_RANKING || this.openRouterKeys.DEFAULT || '';
-    if (!OPENROUTER_API_KEY) {
-      throw new Error('OpenRouter API key for article ranking is not configured. Please update config.js.');
-    }
+    // Use backend proxy endpoint instead of calling OpenRouter directly
+    // This keeps API keys secure on the server side
+    const BACKEND_URL = this.BACKEND_URL;
+    const apiEndpoint = `${BACKEND_URL}/api/openrouter/article-ranking`;
 
     const prompt = `You are a healthcare AI assistant for post kidney transplant patients. 
                     Based on the following patient health data, 
@@ -3225,16 +3223,12 @@ Please respond with ONLY a JSON array of article IDs in priority order, like thi
 Do not include any explanation, just the JSON array.`;
 
     try {
-      console.log('🔑 Using API key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
-      console.log('🌐 Calling OpenRouter API...');
+      console.log('🌐 Calling backend proxy for article ranking...');
       
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': window.location.origin || 'http://localhost:3001',
-          'X-Title': 'everHealthier Patient Dashboard'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           // Using a free model - check https://openrouter.ai/models for available free models
@@ -3341,22 +3335,16 @@ Do not include any explanation, just the JSON array.`;
       // Build comprehensive AI prompt
       const prompt = this.buildPatientAIPrompt(patientData);
       
-      // Call OpenRouter API
-      const OPENROUTER_API_KEY = this.openRouterKeys.PATIENT_INSIGHT || this.openRouterKeys.DEFAULT || '';
-      if (!OPENROUTER_API_KEY) {
-        throw new Error('OpenRouter API key for patient insights is not configured. Please update config.js.');
-      }
+      // Use backend proxy endpoint instead of calling OpenRouter directly
+      const BACKEND_URL = this.BACKEND_URL;
+      const apiEndpoint = `${BACKEND_URL}/api/openrouter/patient-insight`;
       
-      console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
-      console.log('🌐 Calling OpenRouter API for patient insight');
+      console.log('🌐 Calling backend proxy for patient insight...');
       
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': window.location.origin || 'http://localhost:3001',
-          'X-Title': 'everHealthier Patient Dashboard'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: 'meta-llama/llama-3.3-70b-instruct:free',

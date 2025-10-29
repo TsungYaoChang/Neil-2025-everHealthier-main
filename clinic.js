@@ -2964,22 +2964,16 @@ class ClinicianDashboard {
       // Build comprehensive AI prompt
       const prompt = this.buildAIPrompt(patientData);
       
-      // Call OpenRouter API
-      const OPENROUTER_API_KEY = OPENROUTER_API_KEYS.CLINIC_INSIGHT || OPENROUTER_API_KEYS.DEFAULT || '';
-      if (!OPENROUTER_API_KEY) {
-        throw new Error('OpenRouter API key for clinic insights is not configured. Please update config.js.');
-      }
+      // Use backend proxy endpoint instead of calling OpenRouter directly
+      const BACKEND_URL = window.APP_CONFIG?.BACKEND_URL || 'http://localhost:3001';
+      const apiEndpoint = `${BACKEND_URL}/api/openrouter/clinic-insight`;
       
-      console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
-      console.log('🌐 Calling OpenRouter API for patient:', p.name);
+      console.log('🌐 Calling backend proxy for clinic insight for patient:', p.name);
       
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': window.location.origin || 'http://localhost:3001',
-          'X-Title': 'everHealthier Clinic Dashboard'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: 'meta-llama/llama-3.3-70b-instruct:free',
