@@ -2964,7 +2964,7 @@ class ClinicianDashboard {
       const prompt = this.buildAIPrompt(patientData);
       
       // Call OpenRouter API
-      const OPENROUTER_API_KEY = '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';
+      const OPENROUTER_API_KEY = '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';
       
       console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
       console.log('🌐 Calling OpenRouter API for patient:', p.name);
