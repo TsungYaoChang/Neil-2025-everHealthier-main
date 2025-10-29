@@ -3338,7 +3338,7 @@ Do not include any explanation, just the JSON array.`;
       const prompt = this.buildPatientAIPrompt(patientData);
       
       // Call OpenRouter API
-      const OPENROUTER_API_KEY = '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';
+      const OPENROUTER_API_KEY = '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';
       
       console.log('🔑 API Key (first 20 chars):', OPENROUTER_API_KEY.substring(0, 20) + '...');
       console.log('🌐 Calling OpenRouter API for patient insight');
